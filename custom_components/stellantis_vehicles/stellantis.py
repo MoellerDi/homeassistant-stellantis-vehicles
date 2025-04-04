@@ -392,6 +392,7 @@ class StellantisVehicles(StellantisBase):
             token_expiry = datetime.fromisoformat(mqtt_config["expires_in"])
             _LOGGER.debug(f"------------- access_token valid until: {token_expiry}")
             if (token_expiry < (get_datetime() + timedelta(seconds=self._refresh_interval))) or force:
+                _LOGGER.debug(f"------------- refreshing access_token, refresh_token: {mqtt_config['refresh_token']}")
                 url = self.apply_query_params(GET_MQTT_TOKEN_URL, CLIENT_ID_QUERY_PARAMS)
                 headers = self.apply_headers_params(GET_OTP_HEADERS)
                 token_request = await self.make_http_request(url, 'POST', headers, None, {"grant_type": "refresh_token", "refresh_token": mqtt_config["refresh_token"]})
