@@ -53,8 +53,8 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
             raise ConfigEntryAuthFailed from e
         except Exception as e:
             _LOGGER.error(str(e))
-        _LOGGER.debug(self._config)
-        _LOGGER.debug(self._data)
+        _LOGGER.debug(f"_async_update_data self._config: {self._config}")
+        _LOGGER.debug(f"_async_update_data self._data: {self._data}")
         await self.after_async_update_data()
         _LOGGER.debug("---------- END _async_update_data")
 
@@ -95,6 +95,7 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         if update:
             self._commands_history[action_id]["updates"].append({"info": update, "date": get_datetime()})
             if update == "99":
+                _LOGGER.debug(f"---------- Disable command '{self._commands_history[action_id]['name']}' because 'update' is 99")
                 self._disabled_commands.append(self._commands_history[action_id]["name"])
         self.async_update_listeners()
 
@@ -535,7 +536,15 @@ class StellantisBaseButton(StellantisBaseEntity, ButtonEntity):
     @property
     def available(self):
         engine_is_off = "engine" in self._coordinator._sensors and self._coordinator._sensors["engine"] == "Stop"
-        return engine_is_off and (self.name not in self._coordinator._disabled_commands) and not self._coordinator.pending_action
+        # if not engine_is_off:
+        #     _LOGGER.debug(f"Button '{self.name}' is disabled (engine is ON)")
+        button_not_disabled = self.name not in self._coordinator._disabled_commands
+        if not button_not_disabled:
+            _LOGGER.debug(f"Button '{self.name}' is disabled (command disabled)")
+        no_pending_action = not self._coordinator.pending_action
+        if not no_pending_action:
+            _LOGGER.debug(f"Button '{self.name}' is disabled (pending action for {self._coordinator._vehicle['vin']})")
+        return engine_is_off and button_not_disabled and no_pending_action
 
     async def async_press(self):
         raise NotImplementedError

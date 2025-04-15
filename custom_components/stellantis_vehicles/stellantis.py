@@ -84,7 +84,7 @@ class StellantisBase:
                 "basic_token": base64.b64encode(bytes(self._config["client_id"] + ":" + self._config["client_secret"], 'utf-8')).decode('utf-8'),
                 "culture": country_code.lower()
             })
-            _LOGGER.debug(self._config)
+            _LOGGER.debug(f"set_mobile_app self._config: {self._config}")
 
     def save_config(self, data):
         for key in data:
@@ -390,7 +390,7 @@ class StellantisVehicles(StellantisBase):
         async with self._lock_refresh_mqtt_token:
             mqtt_config = self.get_config("mqtt")
             token_expiry = datetime.fromisoformat(mqtt_config["expires_in"])
-            _LOGGER.debug(f"------------- access_token valid until: {token_expiry}")
+            _LOGGER.debug(f"------------- mqtt access_token valid until: {token_expiry}")
             if (token_expiry < (get_datetime() + timedelta(seconds=self._refresh_interval))) or force:
                 url = self.apply_query_params(GET_MQTT_TOKEN_URL, CLIENT_ID_QUERY_PARAMS)
                 headers = self.apply_headers_params(GET_OTP_HEADERS)
@@ -431,13 +431,13 @@ class StellantisVehicles(StellantisBase):
 
     def _on_mqtt_connect(self, client, userdata, result_code, _):
         _LOGGER.debug("---------- START _on_mqtt_connect")
-        _LOGGER.debug("Code %s", result_code)
+        _LOGGER.debug(f"Result_code: {result_code}")
         topics = [MQTT_RESP_TOPIC + self.get_config("customer_id") + "/#"]
         for vehicle in self._vehicles:
             topics.append(MQTT_EVENT_TOPIC + vehicle["vin"])
         for topic in topics:
             client.subscribe(topic)
-            _LOGGER.debug("Topic %s", topic)
+            _LOGGER.debug(f"Topic: {topic}")
         _LOGGER.debug("---------- END _on_mqtt_connect")
 
     def _on_mqtt_disconnect(self, client, userdata, result_code):
