@@ -554,7 +554,10 @@ class StellantisBaseButton(StellantisBaseEntity, ButtonEntity):
         no_pending_action = not self._coordinator.pending_action
         if not no_pending_action:
             _LOGGER.debug(f"Button '{self.name}' is disabled (pending action for {self._coordinator._vehicle['vin']})")
-        return engine_is_off and button_not_disabled and no_pending_action
+        mqtt_connected = self._stellantis._mqtt and self._stellantis._mqtt.is_connected()
+        if not mqtt_connected:
+            _LOGGER.debug(f"Button '{self.name}' is disabled (MQTT not connected)")
+        return engine_is_off and button_not_disabled and no_pending_action and mqtt_connected
 
     async def async_press(self):
         raise NotImplementedError
