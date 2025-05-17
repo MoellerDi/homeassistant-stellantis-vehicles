@@ -13,6 +13,7 @@ from datetime import ( datetime, timedelta, UTC )
 import ssl
 
 from homeassistant.helpers import translation
+from homeassistant.helpers.event import async_track_point_in_time
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.components import persistent_notification
 from homeassistant.util import dt
@@ -287,6 +288,7 @@ class StellantisVehicles(StellantisOauth):
         self._mqtt = None
         self._mqtt_last_request = None
         self._mqtt_publish_pending = {}
+        self._mqtt_scheduled_connect = None
         self._lock_refresh_token = asyncio.Lock()
         self._lock_refresh_mqtt_token = asyncio.Lock()
 
@@ -530,11 +532,11 @@ class StellantisVehicles(StellantisOauth):
             _LOGGER.error("------------- refreshing mqtt access_token failed (no access_token in response)")
             _LOGGER.debug(token_request)
 
-    async def connect_mqtt(self):
+    async def connect_mqtt(self, now=None):
         _LOGGER.debug("---------- START connect_mqtt")
         await self.refresh_mqtt_token()
         if not self._mqtt:
-            self._mqtt = mqtt.Client(clean_session=True, protocol=mqtt.MQTTv311)
+            self._mqtt = mqtt.Client(clean_session=True, protocol=mqtt.MQTTv311, reconnect_on_failure=False)
             self._mqtt.enable_logger(logger=_LOGGER)
             self._mqtt.tls_set_context(_SSL_CONTEXT)
             self._mqtt.on_connect = self._on_mqtt_connect
@@ -542,12 +544,25 @@ class StellantisVehicles(StellantisOauth):
             self._mqtt.on_message = self._on_mqtt_message
             self._mqtt.on_publish = self._on_publish
         if self._mqtt.is_connected():
-            self._mqtt.disconnect()
-        self._mqtt.username_pw_set("IMA_OAUTH_ACCESS_TOKEN", self.get_config("mqtt")["access_token"])
-        self._mqtt.connect(MQTT_SERVER, 8885, 60)
-        self._mqtt.loop_start() # Under the hood, this will call loop_forever in a thread, which means that the thread will terminate if we call disconnect()
+            _LOGGER.debug("------------- MQTT client is already connected")
+        else:
+            try:
+                _LOGGER.debug("------------- MQTT client is not connected, trying to connect...")
+                self._mqtt.disconnect()
+                self._mqtt.username_pw_set("IMA_OAUTH_ACCESS_TOKEN", self.get_config("mqtt")["access_token"])
+                self._mqtt.connect(MQTT_SERVER, 8885, 60)
+                self._mqtt.loop_start() # Under the hood, this will call loop_forever in a thread, which means that the thread will terminate if we call disconnect()
+            except TimeoutError as e:
+                _LOGGER.warning("MQTT connection timeout - retrying MQTT connection in 120 seconds")
+                next_run = get_datetime() + timedelta(seconds=120)
+                self._mqtt_scheduled_connect = async_track_point_in_time(self._hass, self.connect_mqtt, next_run)
+            except Exception as e:
+                _LOGGER.error("Unexpected error during MQTT connection: %s", e)
+                raise
+            else:
+                _LOGGER.debug("------------- MQTT client connected successfully")
+                self._mqtt_scheduled_connect = None
         _LOGGER.debug("---------- END connect_mqtt")
-        return self._mqtt.is_connected()
 
     def _on_mqtt_connect(self, client, userdata, result_code, _):
         _LOGGER.debug("---------- START _on_mqtt_connect")
@@ -619,9 +634,8 @@ class StellantisVehicles(StellantisOauth):
 
     async def send_mqtt_message(self, service, message, vehicle, store=True):
         _LOGGER.debug("---------- START send_mqtt_message")
-        # we need to refresh the token if it is expired, either here upfront or in the mqtt callback '_on_mqtt_message' in case of result_code 400
         try:
-            await self.refresh_mqtt_token(force=(store == False))
+            await self.connect_mqtt()
             customer_id = self.get_config("customer_id")
             topic = MQTT_REQ_TOPIC + customer_id + service
             date = datetime.utcnow()
