@@ -286,6 +286,7 @@ class StellantisVehicles(StellantisOauth):
         self._callback_id = None
         self._mqtt = None
         self._mqtt_last_request = None
+        self._mqtt_publish_pending = {}
         self._lock_refresh_token = asyncio.Lock()
         self._lock_refresh_mqtt_token = asyncio.Lock()
 
@@ -539,6 +540,7 @@ class StellantisVehicles(StellantisOauth):
             self._mqtt.on_connect = self._on_mqtt_connect
             self._mqtt.on_disconnect = self._on_mqtt_disconnect
             self._mqtt.on_message = self._on_mqtt_message
+            self._mqtt.on_publish = self._on_publish
         if self._mqtt.is_connected():
             self._mqtt.disconnect()
         self._mqtt.username_pw_set("IMA_OAUTH_ACCESS_TOKEN", self.get_config("mqtt")["access_token"])
@@ -605,6 +607,16 @@ class StellantisVehicles(StellantisOauth):
             _LOGGER.error("message error")
         _LOGGER.debug("---------- END _on_mqtt_message")
 
+    def _on_publish(self, client, userdata, mid):
+        _LOGGER.debug("---------- START _on_publish")
+        if mid in self._mqtt_publish_pending:
+            data = json.loads(self._mqtt_publish_pending[mid])
+            _LOGGER.debug("------------- MQTT publish data: %s", data)
+            coordinator = self.do_async(self.async_get_coordinator_by_vin(data["vin"]))
+            self.do_async(coordinator.update_command_history(data["correlation_id"], "9999"))
+            self._mqtt_publish_pending.pop(mid)
+        _LOGGER.debug("---------- END _on_publish")
+
     async def send_mqtt_message(self, service, message, vehicle, store=True):
         _LOGGER.debug("---------- START send_mqtt_message")
         # we need to refresh the token if it is expired, either here upfront or in the mqtt callback '_on_mqtt_message' in case of result_code 400
@@ -624,7 +636,8 @@ class StellantisVehicles(StellantisOauth):
             })
             _LOGGER.debug(topic)
             _LOGGER.debug(data)
-            self._mqtt.publish(topic, data)
+            result = self._mqtt.publish(topic, data)
+            self._mqtt_publish_pending[result.mid] = data
             if store:
                 self._mqtt_last_request = [service, message]
             _LOGGER.debug("---------- END send_mqtt_message")

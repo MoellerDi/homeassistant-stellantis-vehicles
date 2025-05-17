@@ -94,6 +94,7 @@
       "command_status": {
         "name": "Command status",
         "state": {
+          "9999": "Sent",
           "99": "Not compatible",
           "900": "Accepted",
           "901": "Vehicle as sleep",
