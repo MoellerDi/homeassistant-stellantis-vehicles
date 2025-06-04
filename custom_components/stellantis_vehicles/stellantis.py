@@ -89,7 +89,7 @@ class StellantisBase:
                 "basic_token": base64.b64encode(bytes(self._config["client_id"] + ":" + self._config["client_secret"], 'utf-8')).decode('utf-8'),
                 "culture": country_code.lower()
             })
-            _LOGGER.debug(self._config)
+            _LOGGER.debug(f"set_mobile_app self._config: {self._config}")
 
     def save_config(self, data):
         for key in data:
@@ -573,13 +573,13 @@ class StellantisVehicles(StellantisOauth):
 
     def _on_mqtt_connect(self, client, userdata, result_code, _):
         _LOGGER.debug("---------- START _on_mqtt_connect")
-        _LOGGER.debug("Code %s", result_code)
+        _LOGGER.debug(f"Result_code: {result_code}")
         topics = [MQTT_RESP_TOPIC + self.get_config("customer_id") + "/#"]
         for vehicle in self._vehicles:
             topics.append(MQTT_EVENT_TOPIC + vehicle["vin"])
         for topic in topics:
             client.subscribe(topic)
-            _LOGGER.debug("Topic %s", topic)
+            _LOGGER.debug(f"Topic: {topic}")
         _LOGGER.debug("---------- END _on_mqtt_connect")
 
     def _on_mqtt_disconnect(self, client, userdata, result_code):

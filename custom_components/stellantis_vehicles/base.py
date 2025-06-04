@@ -59,8 +59,8 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
             raise
         except Exception as e:
             _LOGGER.error(str(e))
-        _LOGGER.debug(self._config)
-        _LOGGER.debug(self._data)
+        _LOGGER.debug(f"_async_update_data self._config: {self._config}")
+        _LOGGER.debug(f"_async_update_data self._data: {self._data}")
         await self.after_async_update_data()
         _LOGGER.debug("---------- END _async_update_data")
 
@@ -106,6 +106,7 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         if update:
             self._commands_history[action_id]["updates"].append({"info": update, "date": get_datetime()})
             if update == "99":
+                _LOGGER.debug(f"---------- Disable command '{self._commands_history[action_id]['name']}' because 'update' is 99")
                 self._disabled_commands.append(self._commands_history[action_id]["name"])
         self.async_update_listeners()
 
