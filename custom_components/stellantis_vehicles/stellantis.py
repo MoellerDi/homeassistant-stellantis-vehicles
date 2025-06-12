@@ -480,7 +480,8 @@ class StellantisVehicles(StellantisOauth):
                     await self._update_mqtt_config(mqtt_config, token_request)
                 except ConfigEntryAuthFailed as ee:
                     _LOGGER.error("------------- 2nd refresh MQTT token failed with: %s", ee)
-                    # If the second attempt fails, raise the exception
+                    # If the second attempt fails, fire an event and raise the exception
+                    self._hass.bus.async_fire("stellantis_vehicles.mqtt_token_refresh_failed", {"error": str(ee)})
                     raise
             except Exception as e:
                 _LOGGER.error("Unexpected error during MQTT token refresh: %s", e)
