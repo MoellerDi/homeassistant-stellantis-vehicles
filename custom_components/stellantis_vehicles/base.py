@@ -379,14 +379,14 @@ class StellantisBaseEntity(CoordinatorEntity):
         vehicle_data = self._coordinator._data
         value = None
         for key in updated_at_map:
-            if not value and key in vehicle_data:
+            if value is None and key in vehicle_data:
                 value = vehicle_data[key]
-            elif value and isinstance(key, int):
+            elif value is not None and isinstance(key, int):
                 value = value[key]
-            elif value and key in value:
+            elif value is not None and key in value:
                 value = value[key]
 
-        if value and not isinstance(value, str):
+        if value is not None and not isinstance(value, str):
             value = None
 
         return value
@@ -396,14 +396,14 @@ class StellantisBaseEntity(CoordinatorEntity):
         vehicle_data = self._coordinator._data
         value = None
         for key in value_map:
-            if not value and key in vehicle_data:
+            if value is None and key in vehicle_data:
                 value = vehicle_data[key]
-            elif value and isinstance(key, int):
+            elif value is not None and isinstance(key, int):
                 value = value[key]
-            elif value and key in value:
+            elif value is not None and key in value:
                 value = value[key]
 
-        if value and not isinstance(value, (float, int, str, bool, list)):
+        if value is not None and not isinstance(value, (float, int, str, bool, list)):
             value = None
 
         return value
@@ -415,10 +415,11 @@ class StellantisBaseEntity(CoordinatorEntity):
             key = self._sensor_key
 
         value = self.get_value_from_map(value_map)
-        if value or (not key in self._coordinator._sensors):
+
+        if value is not None or (key not in self._coordinator._sensors):
             self._coordinator._sensors[key] = value
-        
-        if value == None:
+
+        if value is None:
             return None
 
         if key == "fuel_consumption_total":
@@ -738,7 +739,7 @@ class StellantisBaseTime(StellantisRestoreEntity, TimeEntity):
     def __init__(self, coordinator, description):
         super().__init__(coordinator, description)
         self._sensor_key = f"time_{self._key}"
-        
+
     @property
     def native_value(self):
         """ Native value. """
