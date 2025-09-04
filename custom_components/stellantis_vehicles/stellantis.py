@@ -535,6 +535,7 @@ class StellantisVehicles(StellantisOauth):
                 except ConfigEntryAuthFailed as ee:
                     _LOGGER.error("------------- Attempt to refresh MQTT access_token only failed as well; refresh_token is expired or invalid. Please reauthenticate. Error: %s", ee)
                     # If refreshing access_token only attempt fails as well, raise an exception
+                    self._hass.bus.async_fire("stellantis_vehicles.mqtt_token_refresh_failed", {"error": str(ee)})
                     raise
             except Exception as e:
                 _LOGGER.error("Unexpected error during MQTT token refresh: %s", e)
