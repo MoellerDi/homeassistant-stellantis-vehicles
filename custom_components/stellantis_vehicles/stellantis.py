@@ -62,11 +62,11 @@ _LOGGER = logging.getLogger(__name__)
 class MqttClientMod(mqtt.Client):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-    
+
     def _create_socket_connection(self) -> socket.socket:
         if self._get_proxy():
             return super()._create_socket_connection()  # SOCKS will reduce MSS by itself
-        
+
         addr_infos = socket.getaddrinfo(self._host, self._port, 0, socket.SOCK_STREAM)
         addr_cnt = len(addr_infos)
         if addr_cnt == 0:
@@ -593,7 +593,7 @@ class StellantisVehicles(StellantisOauth):
     async def connect_mqtt(self):
         _LOGGER.debug("---------- START connect_mqtt")
         if self._mqtt is None:
-            self._mqtt = MqttClientMod(clean_session=True, protocol=mqtt.MQTTv311)
+            self._mqtt = MqttClientMod(clean_session=True, protocol=mqtt.MQTTv311, reconnect_on_failure=False)
             self._mqtt.enable_logger(logger=_LOGGER)
             self._mqtt.tls_set_context(_SSL_CONTEXT)
             self._mqtt.on_connect = self._on_mqtt_connect
@@ -673,8 +673,8 @@ class StellantisVehicles(StellantisOauth):
 
     async def send_mqtt_message(self, service, message, vehicle, store=True):
         _LOGGER.debug("---------- START send_mqtt_message")
-        # we need to refresh the token if it is expired, either here upfront or in the mqtt callback '_on_mqtt_message' in case of result_code 400
         try:
+            # we need to refresh the token if it is expired, either here upfront or in the mqtt callback '_on_mqtt_message' in case of result_code 400
             await self.refresh_mqtt_token(force=(store == False))
             customer_id = self.get_config("customer_id")
             topic = MQTT_REQ_TOPIC + customer_id + service
