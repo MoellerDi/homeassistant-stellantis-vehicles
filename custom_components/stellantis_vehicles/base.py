@@ -58,12 +58,12 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         try:
             # Vehicle status
             new_data = await self._stellantis.get_vehicle_status(self._vehicle)
-            if "createdAt" in new_data and "createdAt" in self._data:
+            if "updatedAt" in new_data and "updatedAt" in self._data:
                 try:
-                    current_dt = datetime.fromisoformat(self._data["createdAt"])
-                    new_dt = datetime.fromisoformat(new_data["createdAt"])
+                    current_dt = datetime.fromisoformat(self._data["updatedAt"])
+                    new_dt = datetime.fromisoformat(new_data["updatedAt"])
                 except ValueError:
-                    _LOGGER.debug("Invalid createdAt values, proceeding with update without timestamp comparison")
+                    _LOGGER.debug("Invalid updatedAt values, proceeding with update without timestamp comparison")
                 else:
                     if new_dt <= current_dt:
                         _LOGGER.debug("API did not return updated vehicle data, skipping sensor update")
@@ -413,7 +413,7 @@ class StellantisBaseEntity(CoordinatorEntity):
                     if isinstance(value, list): # key is a dict and value a list
                         # Use dictionnary in map as key_field, key_value to look for in value list
                         key_field, key_value = next(iter(key.items()))
-                        # Select value in list with key_field matching to key_value 
+                        # Select value in list with key_field matching to key_value
                         value = next((item for item in value if item.get(key_field) == key_value), None)
                     else: # set value to None if key is dictionnary and value not a list
                         value = None
