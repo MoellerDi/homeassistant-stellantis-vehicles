@@ -616,12 +616,11 @@ class StellantisVehicles(StellantisOauth):
             mqtt_config = self.get_config("mqtt")
             expires_in = mqtt_config["expires_in"]
             return datetime.fromisoformat(expires_in) - timedelta(minutes=3)
+        if self._mqtt_token_scheduled is not None:
+            self._mqtt_token_scheduled()
+            self._mqtt_token_scheduled = None
         try:
-            if self._mqtt_token_scheduled is not None or force:
-                self._mqtt_token_scheduled()
-                self._mqtt_token_scheduled = None
-                await self.refresh_mqtt_token_request()
-            elif get_datetime() > get_next_run():
+            if force or get_datetime() > get_next_run():
                 await self.refresh_mqtt_token_request()
             next_run = get_next_run()
         except ComunicationError:
