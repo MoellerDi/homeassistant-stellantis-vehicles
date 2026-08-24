@@ -32,7 +32,8 @@ async def async_setup_entry(hass:HomeAssistant, entry, async_add_entities) -> No
                         key = key,
                         translation_key = key,
                         icon = default_value.get("icon", None),
-                        device_class = default_value.get("device_class", None)
+                        device_class = default_value.get("device_class", None),
+                        entity_registry_enabled_default = default_value.get("enabled_by_default", True)
                     )
                     entities.extend([StellantisBaseBinarySensor(coordinator, description, default_value.get("value_map"), default_value.get("updated_at_map"), default_value.get("on_value", None))])
 
