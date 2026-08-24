@@ -15,6 +15,7 @@ from homeassistant.components.http import StaticPathConfig
 from .stellantis import StellantisVehicles
 from .utils import vehicle_removed_issue_id
 from .config_flow import StellantisVehiclesConfigFlow
+from .services import async_setup_services
 
 from .const import (
     DOMAIN,
@@ -110,6 +111,7 @@ async def async_setup_entry(hass: HomeAssistant, config: ConfigEntry) -> bool:
                 f"{DOMAIN} supported features lookup",
             )
 
+        await async_setup_services(hass)
         await hass.config_entries.async_forward_entry_setups(config, PLATFORMS)
     else:
         _LOGGER.warning("No vehicles found for this account")
