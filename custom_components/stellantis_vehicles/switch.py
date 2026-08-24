@@ -4,12 +4,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.components.switch import SwitchEntityDescription
 from homeassistant.const import EntityCategory
 
-from .base import StellantisBaseSwitch
+from .base import ( StellantisBaseSwitch, StellantisPreconditioningProgramEntity )
 
 from .const import (
     DOMAIN,
     VEHICLE_TYPE_ELECTRIC,
-    VEHICLE_TYPE_HYBRID
+    VEHICLE_TYPE_HYBRID,
+    PRECONDITIONING_PROGRAM_SLOTS
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,6 +36,15 @@ async def async_setup_entry(hass:HomeAssistant, entry, async_add_entities) -> No
                     entity_category = EntityCategory.CONFIG
                 )
                 entities.extend([StellantisBatteryChargingLimitSwitch(coordinator, description)])
+
+                for slot in PRECONDITIONING_PROGRAM_SLOTS:
+                    description = SwitchEntityDescription(
+                        name = f"program{slot}_enabled",
+                        key = f"program{slot}_enabled",
+                        translation_key = f"program{slot}_enabled",
+                        icon = "mdi:calendar-check"
+                    )
+                    entities.extend([StellantisPreconditioningProgramSwitch(coordinator, description, slot)])
 
             description = SwitchEntityDescription(
                 name = "abrp_sync",
@@ -66,3 +76,29 @@ class StellantisAbrpSyncSwitch(StellantisBaseSwitch):
     @property
     def available(self):
         return super().available and self._coordinator._sensors.get("text_abrp_token") and len(self._coordinator._sensors.get("text_abrp_token")) == 36
+
+
+class StellantisPreconditioningProgramSwitch(StellantisPreconditioningProgramEntity, StellantisBaseSwitch):
+    @property
+    def is_on(self):
+        """ Is on. """
+        return bool(self._coordinator._sensors.get(self._sensor_key, False))
+
+    async def async_turn_on(self, **kwargs):
+        """ Turn on. """
+        program = self.program
+        await self.write_program(program["day"], program["hour"], program["minute"], True)
+        self._attr_is_on = True
+        self._coordinator._sensors[self._sensor_key] = True
+
+    async def async_turn_off(self, **kwargs):
+        """ Turn off. """
+        program = self.program
+        await self.write_program(program["day"], program["hour"], program["minute"], False)
+        self._attr_is_on = False
+        self._coordinator._sensors[self._sensor_key] = False
+
+    def coordinator_update(self):
+        if not self.has_program_data:
+            return
+        self._coordinator._sensors[self._sensor_key] = bool(self.program["on"])

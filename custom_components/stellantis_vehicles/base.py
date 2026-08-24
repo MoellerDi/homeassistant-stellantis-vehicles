@@ -16,10 +16,10 @@ from homeassistant.components.time import TimeEntity
 from homeassistant.core import callback, HomeAssistant
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.const import ( STATE_UNAVAILABLE, STATE_UNKNOWN, STATE_ON, STATE_OFF)
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ( ConfigEntryAuthFailed, ServiceValidationError )
 from homeassistant.helpers import issue_registry as ir
 
-from .utils import ( time_from_pt_string, get_datetime, date_from_pt_string, time_from_string, rate_limit, log_call )
+from .utils import ( time_from_pt_string, get_datetime, date_from_pt_string, time_from_string, rate_limit, log_call, preconditioning_program_time )
 
 from .const import (
     DOMAIN,
@@ -28,7 +28,9 @@ from .const import (
     VEHICLE_TYPE_HYBRID,
     UPDATE_INTERVAL,
     EMPTY_STATUS_LIMIT,
-    KWH_CORRECTION
+    KWH_CORRECTION,
+    PRECONDITIONING_SERVICE,
+    PRECONDITIONING_PROGRAM_ASAP
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -53,6 +55,7 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         self._privacy_full_logged = False
         self._empty_status_count = 0
         self._vehicle_removed = False
+        self._dropped_programs = set()
 
         if self._stellantis.logger_filter:
             _LOGGER.addFilter(self._stellantis.logger_filter)
@@ -208,6 +211,17 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         }
 
     @property
+    def preconditioning_data(self):
+        """ Preconditioning data of the vehicle. The API spells the key with two n. """
+        data = self._data.get("preconditionning", self._data.get("preconditioning", {}))
+        return data.get("airConditioning", {})
+
+    @property
+    def preconditioning_is_running(self):
+        """ Preconditioning running state. """
+        return self.preconditioning_data.get("status") == "Enabled"
+
+    @property
     def pending_action(self):
         """ Pending action. """
         if not self._commands_history:
@@ -279,8 +293,8 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
            "program4": {"day": [0, 0, 0, 0, 0, 0, 0], "hour": 34, "minute": 7, "on": 0}
         }
         active_programs = None
-        if "programs" in self._data["preconditionning"]["airConditioning"]:
-            current_programs = self._data["preconditionning"]["airConditioning"]["programs"]
+        if "programs" in self.preconditioning_data:
+            current_programs = self.preconditioning_data["programs"]
             if current_programs:
                 for program in current_programs:
                     if program:
@@ -302,11 +316,46 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
                                 "on": int(program["enabled"])
                             }
                             default_programs["program" + str(program["slot"])] = config
+                            self._dropped_programs.discard(program.get("slot"))
+                        elif program.get("slot") not in self._dropped_programs:
+                            # A program without a weekday recurrence or without a start
+                            # time cannot be represented here, so it is replaced by the
+                            # disabled placeholder. Every preconditioning command posts
+                            # the full set of programs back to the vehicle, which means
+                            # such a program is deleted the next time any of them is sent.
+                            self._dropped_programs.add(program.get("slot"))
+                            _LOGGER.warning("Preconditioning program %s of vehicle '%s' has no weekday recurrence or no start time and cannot be read, it will be deleted by the next preconditioning command: %s", program.get("slot"), self._vehicle["vin"], program)
         return default_programs
 
     async def send_preconditioning_command(self, button_name, action):
         """ Send preconditioning command to the vehicle. """
-        await self.send_command(button_name, "/ThermalPrecond", {"asap": action, "programs": self.get_programs()})
+        await self.send_command(button_name, PRECONDITIONING_SERVICE, {"asap": action, "programs": self.get_programs()})
+
+    async def send_preconditioning_program(self, button_name, slot, day, hour, minute, on):
+        """ Write one preconditioning program slot to the vehicle.
+
+        The vehicle stores all four slots in a single payload, so the other three
+        are read back and posted unchanged.
+        """
+        if self.preconditioning_is_running:
+            _LOGGER.warning("Preconditioning is running on vehicle '%s', program %s was not written", self._vehicle["vin"], slot)
+            raise ServiceValidationError(
+                translation_domain = DOMAIN,
+                translation_key = "preconditioning_program_running"
+            )
+        if on and preconditioning_program_time({"hour": hour, "minute": minute}) is None:
+            raise ServiceValidationError(
+                translation_domain = DOMAIN,
+                translation_key = "preconditioning_program_time_missing"
+            )
+        if on and not any(day):
+            raise ServiceValidationError(
+                translation_domain = DOMAIN,
+                translation_key = "preconditioning_program_days_missing"
+            )
+        programs = self.get_programs()
+        programs[f"program{slot}"] = {"day": day, "hour": hour, "minute": minute, "on": int(on)}
+        await self.send_command(button_name, PRECONDITIONING_SERVICE, {"asap": PRECONDITIONING_PROGRAM_ASAP, "programs": programs})
 
     async def send_abrp_data(self):
         """ Send vehicle data to ABRP. """
@@ -939,3 +988,34 @@ class StellantisBaseTime(StellantisRestoreEntity, TimeEntity):
         if self._sensor_key in self._coordinator._sensors:
             return self._coordinator._sensors.get(self._sensor_key)
         return None
+
+
+class StellantisPreconditioningProgramEntity:
+    """ Shared behaviour of the preconditioning program entities.
+
+    Each entity owns one field of one program slot. The value is read back from
+    the vehicle data, the entity keeps no local copy of the schedule.
+    """
+    def __init__(self, coordinator, description, slot) -> None:
+        super().__init__(coordinator, description)
+        self._slot = slot
+
+    @property
+    def available(self):
+        """ Available. """
+        return self.available_command
+
+    @property
+    def program(self):
+        """ Current program of the slot owned by this entity. """
+        return self._coordinator.get_programs()[f"program{self._slot}"]
+
+    @property
+    def has_program_data(self):
+        """ True when the vehicle data contains the preconditioning programs. """
+        return bool(self._coordinator.preconditioning_data)
+
+    async def write_program(self, day, hour, minute, on):
+        """ Write the slot owned by this entity to the vehicle. """
+        await self._coordinator.send_preconditioning_program(self.name, self._slot, day, hour, minute, on)
+        await self._coordinator.async_refresh()
