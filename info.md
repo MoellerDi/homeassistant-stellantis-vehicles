@@ -45,6 +45,7 @@ Send remote commands:
 | Wake up                    |        ✔️         |   ✔️    |        ✔️        |                 |      ✔️      |
 | ABRP sync                  |        ✔️         |   ✔️    |        ✔️        |                 |      ✔️      |
 | Preconditioning start/stop |        ✔️         |   ✔️    |        ✔️        |                 |      ✔️      |
+| Preconditioning programs   |        ✔️         |         |        ✔️        |                 |      ✔️      |
 | Doors open/close           |        ✔️         |   ✔️    |                  |       ✔️        |      ✔️      |
 | Flash lights               |        ✔️         |   ✔️    |                  |       ✔️        |      ✔️      |
 | Honk the horn              |        ✔️         |   ✔️    |                  |       ✔️        |      ✔️      |
@@ -177,6 +178,37 @@ As described in the Stellantis apps, the command is enabled when:
 1. The vehicle engine is off;
 2. The vehicle doors are locked;
 3. The battery level is at least ~~50% (20% for hybrids)~~ 20% or in charging ([#226](https://github.com/andreadegiovine/homeassistant-stellantis-vehicles/issues/226));
+
+### Air conditioning programs
+The vehicle stores four preconditioning programs. Each one is exposed as three entities, for the first program:
+
+- **time.#####VIN#####_preconditioning_program_1_time**
+- **text.#####VIN#####_preconditioning_program_1_days**, a comma separated list built from `Mon,Tue,Wed,Thu,Fri,Sat,Sun`
+- **switch.#####VIN#####_preconditioning_program_1**
+
+The time is the time the vehicle should be ready, not the time preconditioning starts. The vehicle decides how long in advance to start. Measured on one car: a program written at 17:59 with a time of 18:30 started preconditioning at 18:00 and stopped it at 18:31. Enabling a program whose time is nearer than the vehicle's lead time therefore starts preconditioning immediately.
+
+A program can only be enabled once it has a time and at least one day. Writing a program is refused while preconditioning is running, because the write reuses the preconditioning command and could stop the running session.
+
+The same values can be set from an automation:
+
+```yaml
+actions:
+  - action: stellantis_vehicles.set_preconditioning_program
+    data:
+      device_id: 0123456789abcdef0123456789abcdef
+      slot: 1
+      days:
+        - Mon
+        - Tue
+        - Wed
+        - Thu
+        - Fri
+      time: "07:30:00"
+      enabled: true
+```
+
+Fields left out of the call keep the value currently stored in the vehicle.
 
 ## Battery capacity / residual sensors
 Thanks to the community ([#272](https://github.com/andreadegiovine/homeassistant-stellantis-vehicles/issues/272)), it seems that for some vehicles **Stellantis provides incorrect values**. The **switch.battery_values_correction** entity (in your language) applies a correction if active.
