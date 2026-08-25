@@ -37,7 +37,8 @@ async def async_setup_entry(hass: HomeAssistant, config: ConfigEntry):
         vehicles = await stellantis.get_user_vehicles()
     except (ConfigEntryAuthFailed, ComunicationError):
         raise
-    except Exception:
+    except Exception as err:
+        _LOGGER.warning("Failed to fetch vehicles: %s", err)
         vehicles = {}
 
     if vehicles:

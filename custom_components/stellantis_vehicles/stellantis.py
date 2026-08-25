@@ -354,10 +354,13 @@ class StellantisOauth(StellantisBase):
             if self.otp.activation_start():
                 finalyze = self.otp.activation_finalyze()
                 if finalyze != 0:
-                    raise Exception(finalyze)
+                    raise ConfigException(finalyze)
+        except ConfigException as e:
+            _LOGGER.error(str(e))
+            raise
         except Exception as e:
             _LOGGER.error(str(e))
-            raise Exception(str(e))
+            raise ConfigException(str(e)) from e
 
     async def get_otp_sms(self):
         _LOGGER.debug("---------- START get_otp_sms")
@@ -386,7 +389,7 @@ class StellantisOauth(StellantisBase):
             _LOGGER.debug(token_request)
         except ConfigException as e:
             _LOGGER.debug("---------- END get_mqtt_access_token")
-            raise ConfigEntryAuthFailed(str(e))
+            raise ConfigEntryAuthFailed(str(e)) from e
         except Exception:
             _LOGGER.debug("---------- END get_mqtt_access_token")
             raise
@@ -765,7 +768,7 @@ class StellantisVehicles(StellantisOauth):
         try:
             if result_code == 11: # MQTT_ERR_AUTH
                 self.do_async(self.scheduled_mqtt_token_refresh(force=True))
-        except:
+        except Exception:
             pass  # refresh_mqtt_token already logs the exception, and raising would halt the Paho reconnect loop
         _LOGGER.debug("---------- END _on_mqtt_disconnect")
 
@@ -838,7 +841,7 @@ class StellantisVehicles(StellantisOauth):
 #                 if programs:
 #                     self.precond_programs[data["vin"]] = data["precond_state"]["programs"]
                 _LOGGER.debug("Update data from mqtt?!?")
-        except (KeyError, Exception) as e:
+        except Exception as e:
             _LOGGER.warning(f"Error: {str(e)}")
         _LOGGER.debug("---------- END _on_mqtt_message")
 
@@ -875,7 +878,7 @@ class StellantisVehicles(StellantisOauth):
             await self.hass_notify("reconfigure_otp")
             _LOGGER.error("MQTT authentication error. To enable remote commands again please reconfigure the integration")
             _LOGGER.debug("---------- END send_mqtt_message")
-            pass
+            raise
         except Exception as e:
             _LOGGER.error(f"Unexpected error during MQTT message sending: {e}")
             _LOGGER.debug("---------- END send_mqtt_message")
@@ -890,6 +893,6 @@ class StellantisVehicles(StellantisOauth):
             _LOGGER.debug(abrp_request)
             if "status" not in abrp_request or abrp_request["status"] != "ok":
                 _LOGGER.warning(abrp_request)
-        except Exception:
-            pass
+        except Exception as e:
+            _LOGGER.warning("Failed to send ABRP data: %s", e)
         _LOGGER.debug("---------- END send_abrp_data")
