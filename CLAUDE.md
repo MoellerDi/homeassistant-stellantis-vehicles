@@ -50,10 +50,11 @@ block changes on Core-specific enforcement mechanisms that don't exist here.
   `develop` tracks upstream's development branch; `master` tracks releases.
   Don't merge branches into `testing` or `develop` without being asked.
 - `local/changes` holds changes the user does **not** want to publish
-  upstream — it's synced to `origin` only (never to `upstream`, never
-  merged into any upstream-destined branch). Local-only tweaks (including
-  this `CLAUDE.md`) belong here, not on `testing`, `develop`, or any
-  upstream-destined branch.
+  upstream — it's synced to `origin` only (never to `upstream`). It gets
+  merged into `testing` as part of the staging step described above, so its
+  content (including this `CLAUDE.md`) legitimately ends up on `testing`
+  too. It must still never reach `develop` or any upstream-destined
+  staging/PR branch.
 - `README.md` and `info.md` are kept in sync (`render_readme: true` in
   `hacs.json`) — an `update_readme.yaml` workflow may regenerate parts of
   `README.md`. Don't hand-edit generated sections without checking that
@@ -95,9 +96,12 @@ given change, ask before creating the branch.
 
 ## This file must stay local
 
-This `CLAUDE.md` is for local guidance only and is intentionally tracked —
-but only ever on `local/changes`. **Never let it reach `testing`,
-`develop`, or any upstream-destined staging branch** (per the naming
+This `CLAUDE.md` originates on `local/changes` — that's where edits to it
+are made and committed. From there it is merged into `testing` as part of
+the normal staging flow (see "Repo layout & branches" above), so `testing`
+carries it too. **`local/changes` and `testing` are the only two branches
+this file may exist on and be pushed to `origin` from.** It must never
+reach `develop` or any upstream-destined staging/PR branch (per the naming
 convention above), whether via a direct commit, a merge, or a cherry-pick.
 When preparing such a branch, make sure this file is excluded/unstaged
 before pushing to `origin` or `upstream`.
