@@ -269,6 +269,24 @@
       "belt_passenger": {
         "name": "Passenger seatbelt"
       },
+      "door_trunk": {
+        "name": "Trunk"
+      },
+      "door_driver": {
+        "name": "Driver door"
+      },
+      "door_passenger": {
+        "name": "Passenger door"
+      },
+      "door_rear_left": {
+        "name": "Rear left door"
+      },
+      "door_rear_right": {
+        "name": "Rear right door"
+      },
+      "window_rear": {
+        "name": "Rear window"
+      },
       "battery_plugged": {
         "name": "Battery plugged"
       },
