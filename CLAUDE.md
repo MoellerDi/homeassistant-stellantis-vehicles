@@ -48,13 +48,15 @@ block changes on Core-specific enforcement mechanisms that don't exist here.
   branch auto-tracks — but only the remote actually named in that push, so
   still push to `origin` explicitly.
 - `testing` is the primary branch: new contributions are tried out here
-  first. Once a change on `testing` is ready, it gets consolidated into a
-  dedicated staging branch (see naming convention below), which is later
-  used to open the actual pull request upstream. Don't assume these
-  branches are just cherry-picks of *other* people's PRs — they may also be
-  this workflow's staging branches for the user's own contributions.
-  `develop` tracks upstream's development branch; `master` tracks releases.
-  Don't merge branches into `testing` or `develop` without being asked.
+  first. Once a change on `testing` is ready, it gets consolidated into its
+  own dedicated branch (see naming convention below), which is later used
+  to open the actual pull request upstream — don't confuse this with the
+  `local/changes` → `testing` *staging* flow described below, it's a
+  separate, later step. Don't assume these dedicated branches are just
+  cherry-picks of *other* people's PRs — they may also be staged from the
+  user's own contributions. `develop` tracks upstream's development branch;
+  `master` tracks releases. Don't merge branches into `testing` or `develop`
+  without being asked.
 - `local/changes` holds changes the user does **not** want to publish
   upstream — synced to `origin` only (never `upstream`). It merges into
   `testing` as part of the staging flow above, so `testing` carries it too.
