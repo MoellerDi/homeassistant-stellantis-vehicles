@@ -59,6 +59,20 @@ block changes on Core-specific enforcement mechanisms that don't exist here.
   `README.md`. Don't hand-edit generated sections without checking that
   workflow first.
 
+## Push target: always `origin`
+
+`upstream` is a read-only reference remote (for pulling in `develop`), never
+a push target. Every `git push` — new branch or existing one — must go to
+`origin`, and the local branch's tracking must point at `origin/<branch>`,
+not `upstream/<branch>`. Double-check with `git branch -vv` after creating
+or pushing a branch; a branch that ends up tracking `upstream/...` (e.g. by
+running `git push upstream ...` or `git branch --track` against the wrong
+remote by mistake) is a bug — fix it with
+`git branch --set-upstream-to=origin/<branch> <branch>` rather than leaving
+it. `push.autoSetupRemote` is set globally, so a plain `git push` on a new
+branch auto-configures tracking — but only for whichever remote is named in
+that push command, so still push to `origin` explicitly.
+
 ## Branching name convention
 
 New branches use purpose prefixes:
