@@ -9,6 +9,9 @@ read a token directly as a hexadecimal integer.
 
 
 class Tokenizer:
+    """Lazily splits a delimited string into tokens, matching the field
+    order InWebo's mobile SDK uses to serialize its blob."""
+
     def __init__(self, token_string, delimiter="&&"):
         """
         :param token_string: the full delimited string to tokenize.

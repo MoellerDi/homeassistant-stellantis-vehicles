@@ -78,6 +78,16 @@ class ConfigException(Exception):
 
 
 class InweboOTP:
+    """InWebo OTP client: activates a virtual OTP device against an account
+    and generates OTP codes from the resulting keys.
+
+    Mirrors the state machine of InWebo's mobile SDK, driven through two
+    HTTP round trips per step (``activation_start`` / ``activation_finalyze``)
+    in one of three modes: activating a new device (``ACTIVATE_MODE``),
+    generating an OTP code (``OTP_MODE``), or the multi-server key exchange
+    used internally during activation (``MS_MODE``).
+    """
+
     OTP_TWICE = 10  # server asked for a second OTP round-trip before it will hand out real keys
     OK = 0
     NOK = -1
@@ -92,6 +102,16 @@ class InweboOTP:
     proxies = None
 
     def __init__(self, inwebo_access_id, device_id=token_hex(8)):
+        """Initialize a not-yet-activated OTP client for the InWebo service
+        identified by ``inwebo_access_id``.
+
+        :param inwebo_access_id: the InWebo "mac id" identifying the calling
+            application/service (fixed per InWebo account, not per user).
+        :param device_id: id of the virtual OTP device to activate/reuse.
+            Defaults to a fresh random value; pass the previous session's
+            ``device_id`` to reactivate the same device instead of
+            registering a new one.
+        """
         self.rsa_modulus_hex = None      # decoded RSA modulus (was "Kiw")
         self.pin_mode = None
         self.factory_key = None          # key used to decode rsa_modulus_hex (was "Kfact")
@@ -339,12 +359,18 @@ class InweboOTP:
         return otp_code
 
     def __getstate__(self):
+        """Return the picklable state for this instance, dropping the
+        RSA/OAEP cipher object (rebuilt from ``rsa_modulus_hex`` on load,
+        see ``__setstate__``)."""
         state = self.__dict__.copy()
         if 'rsa_cipher' in state:
             del state['rsa_cipher']  # the RSA/OAEP cipher object isn't picklable, rebuild it on load instead
         return state
 
     def __setstate__(self, state):
+        """Restore state from a pickled instance, reconstructing the
+        RSA/OAEP cipher from ``rsa_modulus_hex`` if the device was already
+        activated."""
         self.__dict__.update(state)
         if self.rsa_modulus_hex is not None:
             key = RSA.construct((int(self.rsa_modulus_hex, 16), InweboOTP.exponent))
@@ -352,10 +378,19 @@ class InweboOTP:
 
     @staticmethod
     def set_proxies(proxies):
+        """Set the HTTP(S) proxy configuration (a ``requests``-style
+        proxies dict) used for every request made by every instance of
+        this class."""
         InweboOTP.proxies = proxies
 
 
 def encode_oaep(plaintext, key_hex):
+    """Encrypt ``plaintext`` with RSA-OAEP using the RSA key material in
+    ``key_hex``, the mirror operation of ``InweboOTP.decode_oaep``.
+
+    Currently unused by this module (nothing calls it), kept for API
+    symmetry with ``decode_oaep``.
+    """
     cipher = oaep.new(bytes.fromhex(key_hex), hash_algo=SHA256)
     return cipher.encrypt(plaintext)
 
@@ -373,6 +408,9 @@ class RenameUnpickler(pickle.Unpickler):
     so previously saved otp.bin files still load after the package was
     reorganised."""
     def find_class(self, module, name):
+        """Redirect ``module`` (as recorded in the pickle) to its current
+        location under ``psa_car_controller.psa`` before deferring to the
+        default lookup, so old-format pickles keep unpickling."""
         renamed_module = "psa_car_controller.psa." + module.lower()
         return super().find_class(renamed_module, name)
 

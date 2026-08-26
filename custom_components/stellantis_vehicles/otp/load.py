@@ -37,6 +37,10 @@ def unescape_ampersand(text: str):
 
 
 class IWData:
+    """Decoded state of the InWebo "IW data" blob: device/account identity,
+    rotating keys, linked services, and pending messages, kept in sync
+    with the server via ``apply_server_update``."""
+
     # pylint: disable=invalid-name,too-many-branches,too-many-statements
     def __init__(self, otp_client):
         """
