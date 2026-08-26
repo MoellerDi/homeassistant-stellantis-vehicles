@@ -23,6 +23,10 @@ from Crypto.Util.strxor import strxor
 
 
 class NonStrictOAEPCipher(PKCS1OAEP_Cipher):
+    """RSA-OAEP cipher that skips the leading-zero-byte check in isolation
+    (see module docstring) to avoid a timing side-channel, matching
+    InWebo's non-strict server-side padding."""
+
     # pylint: disable=too-many-locals,invalid-name
     def decrypt(self, ciphertext):
         """Decrypt a message with PKCS#1 OAEP.
@@ -113,6 +117,9 @@ def new(key, hash_algo=None, mgfunc=None, label=b'', rand_func=None):
 # Fixed "random" seed used only by unit tests, so OAEP encryption
 # output is reproducible instead of different on every run.
 def fixed_test_seed(length):
+    """Return a fixed 32-byte "random" seed for reproducible OAEP
+    encryption in unit tests, or None for any other requested length
+    (falls back to ``Random.get_random_bytes``)."""
     if length == 32:
         return b'\xf56\xccL`\x8a\x97l\nX0\xf4\x11\x9a\x0e\xce\x99K^\xe6\xcbU\xf3W+It"\xf5\x84\x1d\xe6'
     return None
