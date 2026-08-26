@@ -21,7 +21,7 @@ from homeassistant.components import persistent_notification
 from homeassistant.helpers.event import async_track_point_in_time
 
 from .base import StellantisVehicleCoordinator
-from .otp.otp import Otp, save_otp, load_otp, ConfigException
+from .otp.otp import InweboOTP, save_otp_session, load_otp_session, ConfigException
 from .utils import ( get_datetime, rate_limit, SensitiveDataFilter, replace_string_placeholders )
 from .exceptions import ( ComunicationError, RateLimitException )
 
@@ -348,9 +348,9 @@ class StellantisOauth(StellantisBase):
 
     def new_otp(self, sms_code, pin_code):
         try:
-            self.otp = Otp("bb8e981582b0f31353108fb020bead1c", device_id=str(self.get_config("oauth")["access_token"][:16]))
-            self.otp.smsCode = sms_code
-            self.otp.codepin = pin_code
+            self.otp = InweboOTP("bb8e981582b0f31353108fb020bead1c", device_id=str(self.get_config("oauth")["access_token"][:16]))
+            self.otp.sms_code = sms_code
+            self.otp.pin_code = pin_code
             if self.otp.activation_start():
                 finalyze = self.otp.activation_finalyze()
                 if finalyze != 0:
@@ -410,7 +410,11 @@ class StellantisOauth(StellantisBase):
                 _LOGGER.error(f"Error: OTP file '{otp_file_path}' not found, please reauthenticate")
                 _LOGGER.debug("---------- END get_otp_code")
                 raise ConfigEntryAuthFailed("OTP file not found, please reauthenticate")
-            self.otp = await self._hass.async_add_executor_job(load_otp, otp_file_path)
+            self.otp = await self._hass.async_add_executor_job(load_otp_session, otp_file_path)
+            if self.otp is None:
+                _LOGGER.error(f"Error: OTP file '{otp_file_path}' could not be loaded, please reauthenticate")
+                _LOGGER.debug("---------- END get_otp_code")
+                raise ConfigEntryAuthFailed("OTP file could not be loaded, please reauthenticate")
         # Get the OTP code using OTP object. It seems there is a rate limit of 6 requests per 24h
         otp_code = await self._hass.async_add_executor_job(self.otp.get_otp_code)
         if otp_code is None:
@@ -418,7 +422,7 @@ class StellantisOauth(StellantisBase):
             _LOGGER.debug("---------- END get_otp_code")
             raise ConfigEntryAuthFailed("OTP code is empty, please reauthenticate")
         # Save updated OTP object to file
-        await self._hass.async_add_executor_job(save_otp, self.otp, otp_file_path)
+        await self._hass.async_add_executor_job(save_otp_session, self.otp, otp_file_path)
         _LOGGER.debug("---------- END get_otp_code")
         return otp_code
 

@@ -77,7 +77,7 @@ class ConfigException(Exception):
     the server rejected a step of the activation/OTP protocol."""
 
 
-class Otp:
+class InweboOTP:
     OTP_TWICE = 10  # server asked for a second OTP round-trip before it will hand out real keys
     OK = 0
     NOK = -1
@@ -110,7 +110,7 @@ class Otp:
         self.rsa_cipher = None
         self.mac_id = inwebo_access_id
         self.sms_code = None
-        self.mode = Otp.ACTIVATE_MODE
+        self.mode = InweboOTP.ACTIVATE_MODE
         self.challenge_number = 0        # server's "defi" (French for "challenge") counter
         self.otp_count = 0
 
@@ -121,7 +121,7 @@ class Otp:
         self.factory_key = Kfact
         self.pin_mode = pinmode
         self.rsa_modulus_hex = self.decode_oaep(Kiw, self.factory_key)
-        key = RSA.construct((int(self.rsa_modulus_hex, 16), Otp.exponent))
+        key = RSA.construct((int(self.rsa_modulus_hex, 16), InweboOTP.exponent))
         self.rsa_cipher = oaep.new(key, hash_algo=SHA256)
 
     def get_serial(self):
@@ -167,7 +167,7 @@ class Otp:
         multi-block payload using the RSA key derived from ``key_hex``.
         """
         modulus = int(key_hex, 16)
-        rsa_key = RSA.construct((modulus, Otp.exponent))
+        rsa_key = RSA.construct((modulus, InweboOTP.exponent))
         cipher = oaep.new(rsa_key, hash_algo=SHA256)
         block_size = 128
         decrypted_hex = ""
@@ -217,17 +217,17 @@ class Otp:
         params = {"action": "ActionSetup", "mode": self.mode, "id": self.iw_data.device_id,
                   "lastsync": self.iw_data.last_sync_timestamp,
                   "version": "Generator-1.0/0.2.11", "macid": self.mac_id}
-        if self.mode == Otp.OTP_MODE:
+        if self.mode == InweboOTP.OTP_MODE:
             params.update({"sid": self.iw_data.secret_ids})
-        elif self.mode == Otp.ACTIVATE_MODE:
+        elif self.mode == InweboOTP.ACTIVATE_MODE:
             params.update({"code": self.sms_code})
 
         response = self.request(params, is_setup=True)
         if response["err"] == "OK":
-            if self.mode == Otp.ACTIVATE_MODE:
+            if self.mode == InweboOTP.ACTIVATE_MODE:
                 key_material = {key: response[key] for key in ["Kiw", "Kfact", "pinmode"]}
                 self.initialize_keys(**key_material)
-            elif self.mode == Otp.OTP_MODE:
+            elif self.mode == InweboOTP.OTP_MODE:
                 self.challenge = response["challenge"]
             return True
         raise ConfigException(response)
@@ -242,10 +242,10 @@ class Otp:
                   "lastsync": self.iw_data.last_sync_timestamp,
                   "version": "Generator-1.0/0.2.11",
                   "lang": "fr", "ack": "", "macid": self.mac_id}
-        if self.mode == Otp.OTP_MODE:
+        if self.mode == InweboOTP.OTP_MODE:
             params.update({"keytype": '0', "sid": self.iw_data.secret_ids})
 
-        elif self.mode == Otp.ACTIVATE_MODE:
+        elif self.mode == InweboOTP.ACTIVATE_MODE:
             kma_encrypted = self.rsa_cipher.encrypt(bytes.fromhex(self.generate_kma(self.pin_code))).hex()
             pin_encrypted = self.rsa_cipher.encrypt(self.pin_code.encode("utf-8")).hex()
             params.update({"serial": self.get_serial(), "code": self.sms_code,
@@ -259,19 +259,19 @@ class Otp:
             return response["err"]
         self.iw_data.apply_server_update(response, self.generate_kma(self.pin_code))
 
-        if self.mode == Otp.OTP_MODE:
+        if self.mode == InweboOTP.OTP_MODE:
             try:
                 self.challenge_number = str(response["defi"])
             except KeyError:
                 raise ConfigException from KeyError
             if "J" in response:
                 logger.debug("Need another otp request")
-                return Otp.OTP_TWICE
-            return Otp.OK
+                return InweboOTP.OTP_TWICE
+            return InweboOTP.OK
 
         if "ms_n" not in response or response["ms_n"] == 0:
             logger.debug("no ms_n request needed")
-            return Otp.OK
+            return InweboOTP.OK
 
         if int(response["ms_n"]) > 1:
             raise NotImplementedError
@@ -296,7 +296,7 @@ class Otp:
         self.iw_data.secret_ids = response["s_id"]
         self.iw_data.secret_count = 1
 
-        followup_params = {"action": "ActionFinalize", "mode": Otp.MS_MODE,
+        followup_params = {"action": "ActionFinalize", "mode": InweboOTP.MS_MODE,
                             "ms_id" + ms_index: response["ms_id"],
                             "ms_val" + ms_index: random_secret_encrypted.hex(), "macid": self.mac_id}
         followup_params.update({"id": self.iw_data.device_id, "lastsync": self.iw_data.last_sync_timestamp,
@@ -304,7 +304,7 @@ class Otp:
         followup_params.update(self.compute_r_values())
         response = self.request(followup_params)
         self.iw_data.apply_server_update(response, self.generate_kma(self.pin_code))
-        return Otp.OK
+        return InweboOTP.OK
 
     def _compute_otp_code(self):
         """Derive the actual OTP code from the current keys and challenge
@@ -321,16 +321,16 @@ class Otp:
         """Run the full activation/OTP flow (retrying once if the server
         asks for it) and return the resulting OTP code, or None on
         failure."""
-        self.mode = Otp.OTP_MODE
+        self.mode = InweboOTP.OTP_MODE
         otp_code = None
         try:
             if self.activation_start():
                 result = self.activation_finalyze()
-                if result != Otp.NOK:
-                    if result == Otp.OTP_TWICE:
-                        self.mode = Otp.OTP_MODE
+                if result != InweboOTP.NOK:
+                    if result == InweboOTP.OTP_TWICE:
+                        self.mode = InweboOTP.OTP_MODE
                         self.activation_start()
-                        assert self.activation_finalyze() == Otp.OK
+                        assert self.activation_finalyze() == InweboOTP.OK
                     otp_code = self._compute_otp_code()
                     assert otp_code is not None
                     logger.debug("otp code: %s", otp_code)
@@ -347,12 +347,12 @@ class Otp:
     def __setstate__(self, state):
         self.__dict__.update(state)
         if self.rsa_modulus_hex is not None:
-            key = RSA.construct((int(self.rsa_modulus_hex, 16), Otp.exponent))
+            key = RSA.construct((int(self.rsa_modulus_hex, 16), InweboOTP.exponent))
             self.rsa_cipher = oaep.new(key, hash_algo=SHA256)
 
     @staticmethod
     def set_proxies(proxies):
-        Otp.proxies = proxies
+        InweboOTP.proxies = proxies
 
 
 def encode_oaep(plaintext, key_hex):
@@ -361,7 +361,7 @@ def encode_oaep(plaintext, key_hex):
 
 
 def save_otp_session(otp_session, filename="otp.bin"):
-    """Persist an Otp session to disk (pickled) so it can be reused
+    """Persist an InweboOTP session to disk (pickled) so it can be reused
     without repeating the full activation flow next time."""
     with open(filename, 'wb') as output_file:
         pickle.dump(otp_session, output_file)
@@ -378,28 +378,53 @@ class RenameUnpickler(pickle.Unpickler):
 
 
 def load_otp_session(filename=CONFIG_NAME):
-    """Load a previously saved Otp session from disk, or None if there
-    isn't one yet."""
+    """Load a previously saved InweboOTP session from disk, or None if there
+    isn't one yet, or if the file on disk can no longer be unpickled
+    into the current InweboOTP/IWData classes (e.g. it was written by an
+    older version of this module that used different attribute names).
+    Callers should treat None the same way as "never activated" and
+    prompt the user to redo the OTP activation step."""
     try:
         with open(filename, 'rb') as input_file:
             try:
                 return pickle.load(input_file)
             except ModuleNotFoundError as ex:
                 logger.debug(ex, exc_info=True)
-                return RenameUnpickler(input_file).load()
+                try:
+                    input_file.seek(0)
+                    return RenameUnpickler(input_file).load()
+                except Exception as ex2:
+                    logger.warning(
+                        "Saved OTP session at %s is incompatible with the current "
+                        "code (likely from an older version) and will be discarded: %s",
+                        filename, ex2
+                    )
+                    logger.debug(ex2, exc_info=True)
+                    return None
+            except Exception as ex:
+                # Any other unpickling failure (AttributeError, TypeError,
+                # EOFError, pickle.UnpicklingError, ...) means the stored
+                # object no longer matches this module's classes.
+                logger.warning(
+                    "Saved OTP session at %s is incompatible with the current "
+                    "code (likely from an older version) and will be discarded: %s",
+                    filename, ex
+                )
+                logger.debug(ex, exc_info=True)
+                return None
     except FileNotFoundError:
         logger.debug("", exc_info=True)
     return None
 
 
-def new_otp_session(sms_code, pin_code, previous_otp_session: Otp = None):
+def new_otp_session(sms_code, pin_code, previous_otp_session: InweboOTP = None):
     """Activate a brand-new OTP device (or reactivate, reusing the same
     device id as ``previous_otp_session`` if given) and persist it to
     disk on success."""
     if previous_otp_session is None:
-        otp_session = Otp("bb8e981582b0f31353108fb020bead1c")
+        otp_session = InweboOTP("bb8e981582b0f31353108fb020bead1c")
     else:
-        otp_session = Otp("bb8e981582b0f31353108fb020bead1c", device_id=previous_otp_session.device_id)
+        otp_session = InweboOTP("bb8e981582b0f31353108fb020bead1c", device_id=previous_otp_session.device_id)
     otp_session.sms_code = sms_code
     otp_session.pin_code = pin_code
     if otp_session.activation_start():
