@@ -367,11 +367,35 @@ class InweboOTP:
             del state['rsa_cipher']  # the RSA/OAEP cipher object isn't picklable, rebuild it on load instead
         return state
 
+    # Maps attribute names used before the "annotated" rewrite (commit
+    # 35d150c) to their current name, so otp.bin files saved by that older
+    # code still restore under the right attributes instead of ending up
+    # with unused old-named ones and missing the new ones.
+    LEGACY_ATTR_ALIASES = {
+        "Kiw": "rsa_modulus_hex",
+        "pinmode": "pin_mode",
+        "Kfact": "factory_key",
+        "needsync": "needs_sync",
+        "serviceid": "service_id",
+        "iwalea": "device_alea",
+        "codepin": "pin_code",
+        "s_id": "session_id",
+        "version": "sdk_version",
+        "isMac": "is_mac_client",
+        "data": "iw_data",
+        "macid": "mac_id",
+        "smsCode": "sms_code",
+        "defi": "challenge_number",
+    }
+
     def __setstate__(self, state):
-        """Restore state from a pickled instance, reconstructing the
-        RSA/OAEP cipher from ``rsa_modulus_hex`` if the device was already
-        activated."""
-        self.__dict__.update(state)
+        """Restore state from a pickled instance, remapping attribute
+        names from the pre-rewrite field-name scheme if present, then
+        reconstructing the RSA/OAEP cipher from ``rsa_modulus_hex`` if the
+        device was already activated."""
+        self.__dict__.update(
+            {self.LEGACY_ATTR_ALIASES.get(key, key): value for key, value in state.items()}
+        )
         if self.rsa_modulus_hex is not None:
             key = RSA.construct((int(self.rsa_modulus_hex, 16), InweboOTP.exponent))
             self.rsa_cipher = oaep.new(key, hash_algo=SHA256)
@@ -402,17 +426,23 @@ def save_otp_session(otp_session, filename="otp.bin"):
         pickle.dump(otp_session, output_file)
 
 
-class RenameUnpickler(pickle.Unpickler):
-    """Unpickler that redirects classes pickled under their old module
-    path to their current location inside psa_car_controller.psa,
-    so previously saved otp.bin files still load after the package was
-    reorganised."""
+class ClassRenameUnpickler(pickle.Unpickler):
+    """Unpickler that redirects classes pickled under an old name to their
+    current name within the same module, so previously saved otp.bin files
+    still load after a class was renamed in place (e.g. ``Otp`` was renamed
+    to ``InweboOTP``, see commit b6e7333)."""
+
+    # (module, old_name) -> new_name
+    RENAMED_CLASSES = {
+        ("custom_components.stellantis_vehicles.otp.otp", "Otp"): "InweboOTP",
+    }
+
     def find_class(self, module, name):
-        """Redirect ``module`` (as recorded in the pickle) to its current
-        location under ``psa_car_controller.psa`` before deferring to the
-        default lookup, so old-format pickles keep unpickling."""
-        renamed_module = "psa_car_controller.psa." + module.lower()
-        return super().find_class(renamed_module, name)
+        """Redirect ``name`` to its current class name for ``module``, if
+        it was renamed, before deferring to the default lookup, so old
+        pickles keep unpickling."""
+        name = self.RENAMED_CLASSES.get((module, name), name)
+        return super().find_class(module, name)
 
 
 def load_otp_session(filename=CONFIG_NAME):
@@ -426,11 +456,11 @@ def load_otp_session(filename=CONFIG_NAME):
         with open(filename, 'rb') as input_file:
             try:
                 return pickle.load(input_file)
-            except ModuleNotFoundError as ex:
+            except AttributeError as ex:
                 logger.debug(ex, exc_info=True)
                 try:
                     input_file.seek(0)
-                    return RenameUnpickler(input_file).load()
+                    return ClassRenameUnpickler(input_file).load()
                 except Exception as ex2:
                     logger.warning(
                         "Saved OTP session at %s is incompatible with the current "
@@ -440,9 +470,9 @@ def load_otp_session(filename=CONFIG_NAME):
                     logger.debug(ex2, exc_info=True)
                     return None
             except Exception as ex:
-                # Any other unpickling failure (AttributeError, TypeError,
-                # EOFError, pickle.UnpicklingError, ...) means the stored
-                # object no longer matches this module's classes.
+                # Any other unpickling failure (TypeError, EOFError,
+                # pickle.UnpicklingError, ...) means the stored object no
+                # longer matches this module's classes.
                 logger.warning(
                     "Saved OTP session at %s is incompatible with the current "
                     "code (likely from an older version) and will be discarded: %s",

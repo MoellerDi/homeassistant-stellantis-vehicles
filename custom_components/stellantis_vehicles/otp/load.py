@@ -53,6 +53,66 @@ class IWData:
         self.tokenizer.next_token()  # discard the leading version token
         self.load_iw_data_v1xx(int(DEFAULT_FORMAT_VERSION), self.tokenizer)
 
+    # Maps attribute names used before the "annotated" rewrite (commit
+    # 35d150c) to their current name, so otp.bin files saved by that older
+    # code still restore this nested object under the right attributes.
+    LEGACY_ATTR_ALIASES = {
+        "IW": "otp_client",
+        "iwid": "device_id",
+        "iwalea": "device_alea",
+        "iwblocked": "is_blocked",
+        "iwhasnopin": "has_no_pin",
+        "iwTsync": "last_sync_timestamp",
+        "kfact": "factory_key",
+        "iwconnected": "connected_timestamp",
+        "iwserver": "server_url",
+        "iwJ": "challenge_token",
+        "iwK": "master_key",
+        "iwK0": "master_key_0",
+        "iwK1": "master_key_1",
+        "iwTref": "reference_timestamp",
+        "iwcancelpin": "cancel_pin_count",
+        "iwnboka": "ok_attempt_count",
+        "iwlastt1": "last_attempt_time_1",
+        "iwlastt2": "last_attempt_time_2",
+        "iwlastt3": "last_attempt_time_3",
+        "iwlastbp": "last_bad_pin_time",
+        "iwstackrand": "stack_random",
+        "iwstack": "stack",
+        "iwH": "verification_hash",
+        "iwsrvn": "service_count",
+        "iwsrvid": "service_ids",
+        "iwsrvname": "service_names",
+        "iwsrvlogo": "service_logos",
+        "iwsrvurl": "service_urls",
+        "iwsrvonlineotp": "service_online_otp",
+        "iwsrvconnected": "service_connected",
+        "iwsrvsecure": "service_secure",
+        "iwsrvksc": "service_ksc",
+        "iwsecn": "secret_count",
+        "iwsecid": "secret_ids",
+        "iwsecval": "secret_values",
+        "iwmsgn": "message_count",
+        "iwmsgtime": "message_time",
+        "iwmsgid": "message_ids",
+        "iwmsgtitle": "message_titles",
+        "iwmsgcontent": "message_contents",
+        "iwmsgack": "message_acks",
+        "iwmajorversion": "major_version",
+        "iwnewversion": "new_version",
+        "iwnewversionurl": "new_version_url",
+        "mustupgrade": "must_upgrade",
+        "datatouch": "data_touched",
+    }
+
+    def __setstate__(self, state):
+        """Restore a pickled IWData, remapping attribute names from the
+        pre-rewrite field-name scheme (``iwid``, ``iwK0``, ...) to their
+        current names if present."""
+        self.__dict__.update(
+            {self.LEGACY_ATTR_ALIASES.get(key, key): value for key, value in state.items()}
+        )
+
     def load_iw_data_v1xx(self, format_version, tokenizer):
         """Parse a "1.xx" format IW data blob token by token, in the exact
         order the fields were written by the server/client."""
