@@ -92,7 +92,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
                 minute = call.data[ATTR_TIME].minute
             if ATTR_ENABLED in call.data:
                 on = call.data[ATTR_ENABLED]
-            name = coordinator.get_translation(f"component.{DOMAIN}.entity.switch.program{slot}_enabled.name", f"program{slot}_enabled")
+            name = coordinator.get_translation(f"component.{DOMAIN}.entity.switch.preconditioning_p{slot}_enabled.name", f"preconditioning_p{slot}_enabled")
             await coordinator.send_preconditioning_program(name, slot, day, hour, minute, on)
             await coordinator.async_refresh()
 
