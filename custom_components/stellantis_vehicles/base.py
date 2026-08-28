@@ -62,8 +62,8 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         self._dropped_programs = set()
         self._programs_cache = None
         # Preconditioning program edits that differ from the vehicle and are held
-        # locally until the user sends them with the send program button or drops
-        # them with the read program button.
+        # locally until the user sends them with the send button or drops them
+        # with the reset button.
         self._pending_programs = {}
 
         if self._stellantis.logger_filter:
@@ -362,8 +362,7 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         A field whose new value matches the vehicle is not staged (and drops any
         earlier stage of it), so a slot only has staged edits while the shown
         values really differ from the vehicle. Staged edits are held until the
-        user sends them with the send program button or drops them with the read
-        program button.
+        user sends them with the send button or drops them with the reset button.
         """
         vehicle_program = self.get_programs()[f"program{slot}"]
         pending = self._pending_programs.setdefault(slot, {})
@@ -1051,8 +1050,8 @@ class StellantisPreconditioningProgramEntity:
 
     Each entity owns one field of one program slot. The days, time and switch
     entities only stage their value locally. The staged slot is sent to the
-    vehicle with the send program button or discarded with the read program
-    button; both buttons are only available while a slot has staged edits.
+    vehicle with the send button or discarded with the reset button; both
+    buttons are only available while a slot has staged edits.
     """
     def __init__(self, coordinator, description, slot) -> None:
         super().__init__(coordinator, description)
