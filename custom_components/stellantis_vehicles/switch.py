@@ -85,18 +85,18 @@ class StellantisPreconditioningProgramSwitch(StellantisPreconditioningProgramEnt
         return bool(self._coordinator._sensors.get(self._sensor_key, False))
 
     async def async_turn_on(self, **kwargs):
-        """ Turn on. """
-        program = self.program
-        await self.write_program(program["day"], program["hour"], program["minute"], True)
+        """ Stage the enabled flag; sent to the vehicle with the send program button. """
         self._coordinator._sensors[self._sensor_key] = True
+        self._coordinator.stage_program(self._slot, on=1)
+        self._coordinator.async_update_listeners()
 
     async def async_turn_off(self, **kwargs):
-        """ Turn off. """
-        program = self.program
-        await self.write_program(program["day"], program["hour"], program["minute"], False)
+        """ Stage the disabled flag; sent to the vehicle with the send program button. """
         self._coordinator._sensors[self._sensor_key] = False
+        self._coordinator.stage_program(self._slot, on=0)
+        self._coordinator.async_update_listeners()
 
     def coordinator_update(self):
-        if not self.has_program_data:
+        if not self.has_program_data or "on" in self.staged_program:
             return
         self._coordinator._sensors[self._sensor_key] = bool(self.program["on"])
