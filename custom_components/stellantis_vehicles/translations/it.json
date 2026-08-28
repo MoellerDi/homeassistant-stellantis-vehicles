@@ -431,6 +431,24 @@
   "exceptions": {
     "command_already_pending": {
       "message": "Impossibile inviare \"{name}\": \"{pending_name}\" è ancora in attesa di una risposta dal veicolo."
+    },
+    "preconditioning_program_running": {
+      "message": "Il precondizionamento è in corso. Interrompilo prima di modificare un programma di precondizionamento, altrimenti il veicolo interpreterà la modifica come una richiesta di arresto."
+    },
+    "preconditioning_program_time_missing": {
+      "message": "Imposta l'orario del programma prima di attivare questo programma di precondizionamento."
+    },
+    "preconditioning_program_days_missing": {
+      "message": "Seleziona almeno un giorno prima di attivare questo programma di precondizionamento."
+    },
+    "preconditioning_program_invalid_day": {
+      "message": "\"{day}\" non è un giorno valido, usane uno tra: {days}."
+    },
+    "preconditioning_program_no_changes": {
+      "message": "Imposta almeno uno tra i campi giorni, orario o attivato per modificare un programma di precondizionamento."
+    },
+    "device_not_found": {
+      "message": "Il dispositivo {device_id} non è un veicolo Stellantis di una voce di configurazione caricata."
     }
   },
   "common": {
