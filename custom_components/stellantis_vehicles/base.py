@@ -30,7 +30,11 @@ from .const import (
     EMPTY_STATUS_LIMIT,
     KWH_CORRECTION,
     PRECONDITIONING_SERVICE,
-    PRECONDITIONING_PROGRAM_ASAP
+    PRECONDITIONING_PROGRAM_ASAP,
+    PRECONDITIONING_PROGRAM_SLOTS,
+    PRECONDITIONING_PROGRAM_DAYS,
+    PRECONDITIONING_PROGRAM_DISABLED_HOUR,
+    PRECONDITIONING_PROGRAM_DISABLED_MINUTE
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -56,6 +60,7 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         self._empty_status_count = 0
         self._vehicle_removed = False
         self._dropped_programs = set()
+        self._programs_cache = None
 
         if self._stellantis.logger_filter:
             _LOGGER.addFilter(self._stellantis.logger_filter)
@@ -213,8 +218,11 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
     @property
     def preconditioning_data(self):
         """ Preconditioning data of the vehicle. The API spells the key with two n. """
-        data = self._data.get("preconditionning", self._data.get("preconditioning", {}))
-        return data.get("airConditioning", {})
+        # The section may be missing or explicitly null, and the same is true for
+        # its "airConditioning" child, so every step is guarded.
+        data = self._data.get("preconditionning") or self._data.get("preconditioning") or {}
+        air_conditioning = data.get("airConditioning") if isinstance(data, dict) else None
+        return air_conditioning if isinstance(air_conditioning, dict) else {}
 
     @property
     def preconditioning_is_running(self):
@@ -285,46 +293,59 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         await self.send_command(button_name, "/VehCharge", {"program": {"hour": current_hour.hour, "minute": current_hour.minute}, "type": action})
 
     def get_programs(self):
-        """ Get current preconditioning programs. """
+        """ Get current preconditioning programs.
+
+        Called for every program entity on every coordinator update, so the
+        result is cached per ``self._data`` object and only recomputed when the
+        vehicle data is replaced by a refresh.
+        """
+        if self._programs_cache is not None and self._programs_cache[0] is self._data:
+            return deepcopy(self._programs_cache[1])
+        programs = self._compute_programs()
+        self._programs_cache = (self._data, programs)
+        return deepcopy(programs)
+
+    def _compute_programs(self):
+        """ Build the preconditioning program map from the raw vehicle data. """
         default_programs = {
-           "program1": {"day": [0, 0, 0, 0, 0, 0, 0], "hour": 34, "minute": 7, "on": 0},
-           "program2": {"day": [0, 0, 0, 0, 0, 0, 0], "hour": 34, "minute": 7, "on": 0},
-           "program3": {"day": [0, 0, 0, 0, 0, 0, 0], "hour": 34, "minute": 7, "on": 0},
-           "program4": {"day": [0, 0, 0, 0, 0, 0, 0], "hour": 34, "minute": 7, "on": 0}
+            f"program{slot}": {
+                "day": [0, 0, 0, 0, 0, 0, 0],
+                "hour": PRECONDITIONING_PROGRAM_DISABLED_HOUR,
+                "minute": PRECONDITIONING_PROGRAM_DISABLED_MINUTE,
+                "on": 0,
+            }
+            for slot in PRECONDITIONING_PROGRAM_SLOTS
         }
-        active_programs = None
-        if "programs" in self.preconditioning_data:
-            current_programs = self.preconditioning_data["programs"]
-            if current_programs:
-                for program in current_programs:
-                    if program:
-                        occurence = program.get("occurence")
-                        if occurence and occurence.get("day") and program.get("start"):
-                            date = time_from_pt_string(program["start"])
-                            config = {
-                                "day": [
-                                    int("Mon" in occurence["day"]),
-                                    int("Tue" in occurence["day"]),
-                                    int("Wed" in occurence["day"]),
-                                    int("Thu" in occurence["day"]),
-                                    int("Fri" in occurence["day"]),
-                                    int("Sat" in occurence["day"]),
-                                    int("Sun" in occurence["day"])
-                                ],
-                                "hour": date.hour,
-                                "minute": date.minute,
-                                "on": int(program["enabled"])
-                            }
-                            default_programs["program" + str(program["slot"])] = config
-                            self._dropped_programs.discard(program.get("slot"))
-                        elif program.get("slot") not in self._dropped_programs:
-                            # A program without a weekday recurrence or without a start
-                            # time cannot be represented here, so it is replaced by the
-                            # disabled placeholder. Every preconditioning command posts
-                            # the full set of programs back to the vehicle, which means
-                            # such a program is deleted the next time any of them is sent.
-                            self._dropped_programs.add(program.get("slot"))
-                            _LOGGER.warning("Preconditioning program %s of vehicle '%s' has no weekday recurrence or no start time and cannot be read, it will be deleted by the next preconditioning command: %s", program.get("slot"), self._vehicle["vin"], program)
+        for program in self.preconditioning_data.get("programs") or []:
+            if not program:
+                continue
+            try:
+                slot = int(program.get("slot"))
+            except (TypeError, ValueError):
+                continue
+            if slot not in PRECONDITIONING_PROGRAM_SLOTS:
+                continue
+            occurence = program.get("occurence") or {}
+            start = program.get("start")
+            date = time_from_pt_string(start) if start else None
+            if occurence.get("day") and date is not None:
+                default_programs[f"program{slot}"] = {
+                    "day": [int(name in occurence["day"]) for name in PRECONDITIONING_PROGRAM_DAYS],
+                    "hour": date.hour,
+                    "minute": date.minute,
+                    "on": int(program.get("enabled", 0)),
+                }
+                self._dropped_programs.discard(slot)
+            elif (start or occurence.get("day")) and slot not in self._dropped_programs:
+                # A partially defined program (a weekday recurrence or a start
+                # time, but not both, or a start time that cannot be parsed)
+                # cannot be represented here, so it is replaced by the disabled
+                # placeholder. Every preconditioning command posts the full set
+                # of programs back to the vehicle, which means such a program is
+                # deleted the next time any of them is sent. An empty or fully
+                # disabled slot is expected and stays silent.
+                self._dropped_programs.add(slot)
+                _LOGGER.info("Preconditioning program %s of vehicle '%s' is incomplete and cannot be read, it will be deleted by the next preconditioning command: %s", slot, self._vehicle["vin"], program)
         return default_programs
 
     async def send_preconditioning_command(self, button_name, action):
@@ -1003,7 +1024,7 @@ class StellantisPreconditioningProgramEntity:
     @property
     def available(self):
         """ Available. """
-        return self.available_command
+        return self.available_command and self.has_program_data
 
     @property
     def program(self):

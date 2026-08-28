@@ -2,7 +2,7 @@ import logging
 
 import voluptuous as vol
 
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.const import ATTR_DEVICE_ID
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
@@ -31,25 +31,30 @@ SET_PRECONDITIONING_PROGRAM_SCHEMA = vol.Schema({
 })
 
 
+def get_coordinator_for_device(hass: HomeAssistant, device):
+    """ Get the coordinator of the Stellantis vehicle behind a device entry. """
+    if not device:
+        return None
+    domain_data = hass.data.get(DOMAIN, {})
+    for identifier in device.identifiers:
+        # A device can carry identifiers from other integrations too, and some of
+        # those are not the plain (domain, id) pair, so index instead of unpack.
+        if identifier[0] != DOMAIN:
+            continue
+        vin = identifier[1]
+        for entry_id in device.config_entries:
+            stellantis = domain_data.get(entry_id)
+            if stellantis and (coordinator := stellantis.async_get_coordinator_by_vin(vin)):
+                return coordinator
+    return None
+
+
 def get_coordinators(hass: HomeAssistant, device_ids):
     """ Get the coordinators of the vehicles targeted by a service call. """
     registry = dr.async_get(hass)
     coordinators = []
     for device_id in device_ids:
-        device = registry.async_get(device_id)
-        coordinator = None
-        if device:
-            for identifier in device.identifiers:
-                if identifier[0] != DOMAIN:
-                    continue
-                for entry_id in device.config_entries:
-                    stellantis = hass.data.get(DOMAIN, {}).get(entry_id)
-                    if stellantis:
-                        coordinator = stellantis.async_get_coordinator_by_vin(identifier[1])
-                        if coordinator:
-                            break
-                if coordinator:
-                    break
+        coordinator = get_coordinator_for_device(hass, registry.async_get(device_id))
         if not coordinator:
             raise ServiceValidationError(
                 translation_domain = DOMAIN,
@@ -60,12 +65,18 @@ def get_coordinators(hass: HomeAssistant, device_ids):
     return coordinators
 
 
-async def async_setup_services(hass: HomeAssistant) -> None:
+@callback
+def async_setup_services(hass: HomeAssistant) -> None:
     """ Register the integration services. """
 
     async def async_set_preconditioning_program(call: ServiceCall) -> None:
         """ Write one preconditioning program slot of one or more vehicles. """
         slot = call.data[ATTR_SLOT]
+        if not any(attr in call.data for attr in (ATTR_DAYS, ATTR_TIME, ATTR_ENABLED)):
+            raise ServiceValidationError(
+                translation_domain = DOMAIN,
+                translation_key = "preconditioning_program_no_changes"
+            )
         for coordinator in get_coordinators(hass, call.data[ATTR_DEVICE_ID]):
             program = coordinator.get_programs()[f"program{slot}"]
             day = program["day"]

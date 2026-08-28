@@ -88,14 +88,12 @@ class StellantisPreconditioningProgramSwitch(StellantisPreconditioningProgramEnt
         """ Turn on. """
         program = self.program
         await self.write_program(program["day"], program["hour"], program["minute"], True)
-        self._attr_is_on = True
         self._coordinator._sensors[self._sensor_key] = True
 
     async def async_turn_off(self, **kwargs):
         """ Turn off. """
         program = self.program
         await self.write_program(program["day"], program["hour"], program["minute"], False)
-        self._attr_is_on = False
         self._coordinator._sensors[self._sensor_key] = False
 
     def coordinator_update(self):

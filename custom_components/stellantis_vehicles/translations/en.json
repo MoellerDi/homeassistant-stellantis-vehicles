@@ -439,6 +439,9 @@
     "preconditioning_program_invalid_day": {
       "message": "\"{day}\" is not a valid day, use one of: {days}."
     },
+    "preconditioning_program_no_changes": {
+      "message": "Set at least one of days, time or enabled to change a preconditioning program."
+    },
     "device_not_found": {
       "message": "Device {device_id} is not a Stellantis vehicle of a loaded config entry."
     }

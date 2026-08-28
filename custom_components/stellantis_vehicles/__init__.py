@@ -6,6 +6,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import issue_registry, device_registry as dr
+from homeassistant.helpers.typing import ConfigType
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 
@@ -24,6 +25,13 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """ Set up the Stellantis Vehicles integration. """
+    await async_setup_services(hass)
+    return True
+
 
 async def async_setup_entry(hass: HomeAssistant, config: ConfigEntry):
 
@@ -77,7 +85,6 @@ async def async_setup_entry(hass: HomeAssistant, config: ConfigEntry):
             hass.data[DOMAIN].pop(config.entry_id, None)
             raise
 
-        await async_setup_services(hass)
         await hass.config_entries.async_forward_entry_setups(config, PLATFORMS)
     else:
         _LOGGER.warning("No vehicles found for this account")

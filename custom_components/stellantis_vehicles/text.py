@@ -67,8 +67,7 @@ class StellantisPreconditioningProgramDays(StellantisPreconditioningProgramEntit
         days = preconditioning_days_from_string(value)
         program = self.program
         await self.write_program(days, program["hour"], program["minute"], program["on"])
-        self._attr_native_value = preconditioning_days_to_string(days)
-        self._coordinator._sensors[self._sensor_key] = self._attr_native_value
+        self._coordinator._sensors[self._sensor_key] = preconditioning_days_to_string(days)
 
     def coordinator_update(self):
         if not self.has_program_data:

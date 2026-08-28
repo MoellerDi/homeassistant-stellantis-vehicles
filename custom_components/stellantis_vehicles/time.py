@@ -74,7 +74,6 @@ class StellantisPreconditioningProgramTime(StellantisPreconditioningProgramEntit
     async def async_set_value(self, value):
         program = self.program
         await self.write_program(program["day"], value.hour, value.minute, program["on"])
-        self._attr_native_value = value
         self._coordinator._sensors[self._sensor_key] = value
 
     def coordinator_update(self):

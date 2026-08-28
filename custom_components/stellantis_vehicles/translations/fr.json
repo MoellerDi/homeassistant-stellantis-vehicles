@@ -390,6 +390,26 @@
       }
     }
   },
+  "exceptions": {
+    "preconditioning_program_running": {
+      "message": "Le préconditionnement est en cours. Arrêtez-le avant de modifier un programme de préconditionnement, sinon le véhicule interprétera la modification comme une demande d'arrêt."
+    },
+    "preconditioning_program_time_missing": {
+      "message": "Définissez l'heure du programme avant d'activer ce programme de préconditionnement."
+    },
+    "preconditioning_program_days_missing": {
+      "message": "Sélectionnez au moins un jour avant d'activer ce programme de préconditionnement."
+    },
+    "preconditioning_program_invalid_day": {
+      "message": "« {day} » n'est pas un jour valide, utilisez l'une des valeurs suivantes : {days}."
+    },
+    "preconditioning_program_no_changes": {
+      "message": "Définissez au moins l'un des champs jours, heure ou activé pour modifier un programme de préconditionnement."
+    },
+    "device_not_found": {
+      "message": "L'appareil {device_id} n'est pas un véhicule Stellantis d'une entrée de configuration chargée."
+    }
+  },
   "common": {
     "access_token_error_title": "Erreur jeton d'accès",
     "access_token_error_message": "Vérifier la documentation officielle dans la section [OAuth2 Code]({oauth_token_doc_link})",

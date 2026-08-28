@@ -389,6 +389,26 @@
       }
     }
   },
+  "exceptions": {
+    "preconditioning_program_running": {
+      "message": "Die Vorklimatisierung läuft gerade. Beenden Sie sie, bevor Sie ein Vorklimatisierungsprogramm ändern, sonst wertet das Fahrzeug die Änderung als Stopp-Anforderung."
+    },
+    "preconditioning_program_time_missing": {
+      "message": "Legen Sie die Programmzeit fest, bevor Sie dieses Vorklimatisierungsprogramm aktivieren."
+    },
+    "preconditioning_program_days_missing": {
+      "message": "Wählen Sie mindestens einen Tag aus, bevor Sie dieses Vorklimatisierungsprogramm aktivieren."
+    },
+    "preconditioning_program_invalid_day": {
+      "message": "„{day}“ ist kein gültiger Tag, verwenden Sie einen von: {days}."
+    },
+    "preconditioning_program_no_changes": {
+      "message": "Legen Sie mindestens eines der Felder Tage, Zeit oder Aktiviert fest, um ein Vorklimatisierungsprogramm zu ändern."
+    },
+    "device_not_found": {
+      "message": "Das Gerät {device_id} ist kein Stellantis-Fahrzeug eines geladenen Konfigurationseintrags."
+    }
+  },
   "common": {
     "access_token_error_title": "Zugriffstoken-Fehler",
     "access_token_error_message": "Lesen Sie die offizielle Dokumentation im [OAuth2 Code]({oauth_token_doc_link}) Abschnitt",
