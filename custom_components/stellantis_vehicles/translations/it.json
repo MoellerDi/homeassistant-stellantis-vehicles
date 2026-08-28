@@ -332,6 +332,30 @@
       },
       "preconditioning_stop": {
         "name": "Stop precondizionamento"
+      },
+      "program1_send": {
+        "name": "Invia programma di precondizionamento 1"
+      },
+      "program2_send": {
+        "name": "Invia programma di precondizionamento 2"
+      },
+      "program3_send": {
+        "name": "Invia programma di precondizionamento 3"
+      },
+      "program4_send": {
+        "name": "Invia programma di precondizionamento 4"
+      },
+      "program1_read": {
+        "name": "Leggi programma di precondizionamento 1"
+      },
+      "program2_read": {
+        "name": "Leggi programma di precondizionamento 2"
+      },
+      "program3_read": {
+        "name": "Leggi programma di precondizionamento 3"
+      },
+      "program4_read": {
+        "name": "Leggi programma di precondizionamento 4"
       }
     },
     "device_tracker": {
@@ -373,16 +397,52 @@
       },
       "battery_values_correction": {
         "name": "Correzione valori batteria"
+      },
+      "program1_enabled": {
+        "name": "Programma di precondizionamento 1"
+      },
+      "program2_enabled": {
+        "name": "Programma di precondizionamento 2"
+      },
+      "program3_enabled": {
+        "name": "Programma di precondizionamento 3"
+      },
+      "program4_enabled": {
+        "name": "Programma di precondizionamento 4"
       }
     },
     "text": {
       "abrp_token": {
         "name": "Token ABRP"
+      },
+      "program1_days": {
+        "name": "Programma di precondizionamento 1 giorni"
+      },
+      "program2_days": {
+        "name": "Programma di precondizionamento 2 giorni"
+      },
+      "program3_days": {
+        "name": "Programma di precondizionamento 3 giorni"
+      },
+      "program4_days": {
+        "name": "Programma di precondizionamento 4 giorni"
       }
     },
     "time": {
       "battery_charging_start": {
         "name": "Inizio ricarica batteria"
+      },
+      "program1_time": {
+        "name": "Programma di precondizionamento 1 ora"
+      },
+      "program2_time": {
+        "name": "Programma di precondizionamento 2 ora"
+      },
+      "program3_time": {
+        "name": "Programma di precondizionamento 3 ora"
+      },
+      "program4_time": {
+        "name": "Programma di precondizionamento 4 ora"
       }
     }
   },

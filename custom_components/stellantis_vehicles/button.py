@@ -3,13 +3,14 @@ import logging
 from homeassistant.core import HomeAssistant
 from homeassistant.components.button import ButtonEntityDescription
 
-from .base import ( StellantisBaseButton, StellantisBaseActionButton )
+from .base import ( StellantisBaseButton, StellantisBaseActionButton, StellantisPreconditioningProgramEntity )
 from .utils import RateLimitException
 
 from .const import (
     DOMAIN,
     VEHICLE_TYPE_ELECTRIC,
-    VEHICLE_TYPE_HYBRID
+    VEHICLE_TYPE_HYBRID,
+    PRECONDITIONING_PROGRAM_SLOTS
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -87,6 +88,23 @@ async def async_setup_entry(hass:HomeAssistant, entry, async_add_entities) -> No
         entities.extend([StellantisPreconditioningButton(coordinator, description, "deactivate")])
 
         if coordinator.vehicle_type in [VEHICLE_TYPE_ELECTRIC, VEHICLE_TYPE_HYBRID]:
+            for slot in PRECONDITIONING_PROGRAM_SLOTS:
+                description = ButtonEntityDescription(
+                    name = f"program{slot}_send",
+                    key = f"program{slot}_send",
+                    translation_key = f"program{slot}_send",
+                    icon = "mdi:calendar-export"
+                )
+                entities.extend([StellantisPreconditioningProgramSendButton(coordinator, description, slot)])
+
+                description = ButtonEntityDescription(
+                    name = f"program{slot}_read",
+                    key = f"program{slot}_read",
+                    translation_key = f"program{slot}_read",
+                    icon = "mdi:calendar-import"
+                )
+                entities.extend([StellantisPreconditioningProgramReadButton(coordinator, description, slot)])
+
             description = ButtonEntityDescription(
                 name = "charge_start",
                 key = "charge_start",
@@ -139,6 +157,28 @@ class StellantisChargingStartStopButton(StellantisBaseActionButton):
 
     async def async_press(self):
         await self._coordinator.send_charge_command(self.name, False, self._action)
+
+class StellantisPreconditioningProgramSendButton(StellantisPreconditioningProgramEntity, StellantisBaseButton):
+    @property
+    def available(self):
+        """ Only available while the slot has edits that differ from the vehicle. """
+        return super().available and bool(self.staged_program)
+
+    async def async_press(self):
+        """ Send the staged program (days, time, enabled flag) to the vehicle. """
+        program = self.effective_program
+        await self.write_program(program["day"], program["hour"], program["minute"], program["on"])
+
+class StellantisPreconditioningProgramReadButton(StellantisPreconditioningProgramEntity, StellantisBaseButton):
+    @property
+    def available(self):
+        """ Only available while the slot has edits that differ from the vehicle. """
+        return super().available and bool(self.staged_program)
+
+    async def async_press(self):
+        """ Drop the staged edits and show the values currently reported by the vehicle. """
+        self._coordinator.clear_staged_program(self._slot)
+        self._coordinator.async_update_listeners()
 
 class StellantisPreconditioningButton(StellantisBaseActionButton):
     @property

@@ -63,13 +63,13 @@ class StellantisPreconditioningProgramDays(StellantisPreconditioningProgramEntit
         return self._coordinator._sensors.get(self._sensor_key, "")
 
     async def async_set_value(self, value: str):
-        """ Set value. """
+        """ Stage the days locally; sent to the vehicle with the send program button. """
         days = preconditioning_days_from_string(value)
-        program = self.program
-        await self.write_program(days, program["hour"], program["minute"], program["on"])
         self._coordinator._sensors[self._sensor_key] = preconditioning_days_to_string(days)
+        self._coordinator.stage_program(self._slot, day=days)
+        self._coordinator.async_update_listeners()
 
     def coordinator_update(self):
-        if not self.has_program_data:
+        if not self.has_program_data or "day" in self.staged_program:
             return
         self._coordinator._sensors[self._sensor_key] = preconditioning_days_to_string(self.program["day"])

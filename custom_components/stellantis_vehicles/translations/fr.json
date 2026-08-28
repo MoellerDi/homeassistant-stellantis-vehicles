@@ -336,6 +336,30 @@
       },
       "preconditioning_stop": {
         "name": "Arrêter pré-conditionnement"
+      },
+      "program1_send": {
+        "name": "Envoyer le programme de préconditionnement 1"
+      },
+      "program2_send": {
+        "name": "Envoyer le programme de préconditionnement 2"
+      },
+      "program3_send": {
+        "name": "Envoyer le programme de préconditionnement 3"
+      },
+      "program4_send": {
+        "name": "Envoyer le programme de préconditionnement 4"
+      },
+      "program1_read": {
+        "name": "Lire le programme de préconditionnement 1"
+      },
+      "program2_read": {
+        "name": "Lire le programme de préconditionnement 2"
+      },
+      "program3_read": {
+        "name": "Lire le programme de préconditionnement 3"
+      },
+      "program4_read": {
+        "name": "Lire le programme de préconditionnement 4"
       }
     },
     "device_tracker": {
@@ -377,16 +401,52 @@
       },
       "battery_values_correction": {
         "name": "Correction des valeurs de la batterie"
+      },
+      "program1_enabled": {
+        "name": "Programme de préconditionnement 1"
+      },
+      "program2_enabled": {
+        "name": "Programme de préconditionnement 2"
+      },
+      "program3_enabled": {
+        "name": "Programme de préconditionnement 3"
+      },
+      "program4_enabled": {
+        "name": "Programme de préconditionnement 4"
       }
     },
     "text": {
       "abrp_token": {
         "name": "Jeton ABRP"
+      },
+      "program1_days": {
+        "name": "Programme de préconditionnement 1 jours"
+      },
+      "program2_days": {
+        "name": "Programme de préconditionnement 2 jours"
+      },
+      "program3_days": {
+        "name": "Programme de préconditionnement 3 jours"
+      },
+      "program4_days": {
+        "name": "Programme de préconditionnement 4 jours"
       }
     },
     "time": {
       "battery_charging_start": {
         "name": "Début recharge batterie"
+      },
+      "program1_time": {
+        "name": "Programme de préconditionnement 1 heure"
+      },
+      "program2_time": {
+        "name": "Programme de préconditionnement 2 heure"
+      },
+      "program3_time": {
+        "name": "Programme de préconditionnement 3 heure"
+      },
+      "program4_time": {
+        "name": "Programme de préconditionnement 4 heure"
       }
     }
   },

@@ -336,6 +336,30 @@
       },
       "preconditioning_stop": {
         "name": "Preconditioning stop"
+      },
+      "program1_send": {
+        "name": "Send preconditioning program 1"
+      },
+      "program2_send": {
+        "name": "Send preconditioning program 2"
+      },
+      "program3_send": {
+        "name": "Send preconditioning program 3"
+      },
+      "program4_send": {
+        "name": "Send preconditioning program 4"
+      },
+      "program1_read": {
+        "name": "Read preconditioning program 1"
+      },
+      "program2_read": {
+        "name": "Read preconditioning program 2"
+      },
+      "program3_read": {
+        "name": "Read preconditioning program 3"
+      },
+      "program4_read": {
+        "name": "Read preconditioning program 4"
       }
     },
     "device_tracker": {

@@ -61,6 +61,10 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         self._vehicle_removed = False
         self._dropped_programs = set()
         self._programs_cache = None
+        # Preconditioning program edits that differ from the vehicle and are held
+        # locally until the user sends them with the send program button or drops
+        # them with the read program button.
+        self._pending_programs = {}
 
         if self._stellantis.logger_filter:
             _LOGGER.addFilter(self._stellantis.logger_filter)
@@ -347,6 +351,37 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
                 self._dropped_programs.add(slot)
                 _LOGGER.info("Preconditioning program %s of vehicle '%s' is incomplete and cannot be read, it will be deleted by the next preconditioning command: %s", slot, self._vehicle["vin"], program)
         return default_programs
+
+    def get_staged_program(self, slot):
+        """ Locally staged field edits for a program slot that differ from the vehicle. """
+        return self._pending_programs.get(slot, {})
+
+    def stage_program(self, slot, **fields):
+        """ Record program field edits locally.
+
+        A field whose new value matches the vehicle is not staged (and drops any
+        earlier stage of it), so a slot only has staged edits while the shown
+        values really differ from the vehicle. Staged edits are held until the
+        user sends them with the send program button or drops them with the read
+        program button.
+        """
+        vehicle_program = self.get_programs()[f"program{slot}"]
+        pending = self._pending_programs.setdefault(slot, {})
+        for key, value in fields.items():
+            if value == vehicle_program.get(key):
+                pending.pop(key, None)
+            else:
+                pending[key] = value
+        if not pending:
+            self._pending_programs.pop(slot, None)
+
+    def clear_staged_program(self, slot):
+        """ Drop the staged edits for a program slot. """
+        self._pending_programs.pop(slot, None)
+
+    def effective_program(self, slot):
+        """ Program of a slot with any staged edits applied on top. """
+        return {**self.get_programs()[f"program{slot}"], **self.get_staged_program(slot)}
 
     async def send_preconditioning_command(self, button_name, action):
         """ Send preconditioning command to the vehicle. """
@@ -1014,8 +1049,10 @@ class StellantisBaseTime(StellantisRestoreEntity, TimeEntity):
 class StellantisPreconditioningProgramEntity:
     """ Shared behaviour of the preconditioning program entities.
 
-    Each entity owns one field of one program slot. The value is read back from
-    the vehicle data, the entity keeps no local copy of the schedule.
+    Each entity owns one field of one program slot. The days, time and switch
+    entities only stage their value locally. The staged slot is sent to the
+    vehicle with the send program button or discarded with the read program
+    button; both buttons are only available while a slot has staged edits.
     """
     def __init__(self, coordinator, description, slot) -> None:
         super().__init__(coordinator, description)
@@ -1028,8 +1065,18 @@ class StellantisPreconditioningProgramEntity:
 
     @property
     def program(self):
-        """ Current program of the slot owned by this entity. """
+        """ Current program of the slot owned by this entity, as read from the vehicle. """
         return self._coordinator.get_programs()[f"program{self._slot}"]
+
+    @property
+    def staged_program(self):
+        """ Locally staged, not-yet-sent field edits for this slot. """
+        return self._coordinator.get_staged_program(self._slot)
+
+    @property
+    def effective_program(self):
+        """ Vehicle program with any staged edits applied on top. """
+        return self._coordinator.effective_program(self._slot)
 
     @property
     def has_program_data(self):
@@ -1037,6 +1084,7 @@ class StellantisPreconditioningProgramEntity:
         return bool(self._coordinator.preconditioning_data)
 
     async def write_program(self, day, hour, minute, on):
-        """ Write the slot owned by this entity to the vehicle. """
+        """ Send the slot owned by this entity to the vehicle and drop staged edits. """
         await self._coordinator.send_preconditioning_program(self.name, self._slot, day, hour, minute, on)
+        self._coordinator.clear_staged_program(self._slot)
         await self._coordinator.async_refresh()

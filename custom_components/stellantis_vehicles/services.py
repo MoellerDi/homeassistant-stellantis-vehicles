@@ -78,6 +78,8 @@ def async_setup_services(hass: HomeAssistant) -> None:
                 translation_key = "preconditioning_program_no_changes"
             )
         for coordinator in get_coordinators(hass, call.data[ATTR_DEVICE_ID]):
+            # This service works on the vehicle values only; UI staging is a
+            # separate, UI-only workflow and is left untouched here.
             program = coordinator.get_programs()[f"program{slot}"]
             day = program["day"]
             hour = program["hour"]

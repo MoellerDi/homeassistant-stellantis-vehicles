@@ -335,6 +335,30 @@
       },
       "preconditioning_stop": {
         "name": "Vorklimatisierung stoppen"
+      },
+      "program1_send": {
+        "name": "Vorklimatisierungsprogramm 1 senden"
+      },
+      "program2_send": {
+        "name": "Vorklimatisierungsprogramm 2 senden"
+      },
+      "program3_send": {
+        "name": "Vorklimatisierungsprogramm 3 senden"
+      },
+      "program4_send": {
+        "name": "Vorklimatisierungsprogramm 4 senden"
+      },
+      "program1_read": {
+        "name": "Vorklimatisierungsprogramm 1 lesen"
+      },
+      "program2_read": {
+        "name": "Vorklimatisierungsprogramm 2 lesen"
+      },
+      "program3_read": {
+        "name": "Vorklimatisierungsprogramm 3 lesen"
+      },
+      "program4_read": {
+        "name": "Vorklimatisierungsprogramm 4 lesen"
       }
     },
     "device_tracker": {
@@ -376,16 +400,52 @@
       },
       "battery_values_correction": {
         "name": "Korrektur der Batteriewerte"
+      },
+      "program1_enabled": {
+        "name": "Vorklimatisierungsprogramm 1"
+      },
+      "program2_enabled": {
+        "name": "Vorklimatisierungsprogramm 2"
+      },
+      "program3_enabled": {
+        "name": "Vorklimatisierungsprogramm 3"
+      },
+      "program4_enabled": {
+        "name": "Vorklimatisierungsprogramm 4"
       }
     },
     "text": {
       "abrp_token": {
         "name": "ABRP Token"
+      },
+      "program1_days": {
+        "name": "Vorklimatisierungsprogramm 1 Tage"
+      },
+      "program2_days": {
+        "name": "Vorklimatisierungsprogramm 2 Tage"
+      },
+      "program3_days": {
+        "name": "Vorklimatisierungsprogramm 3 Tage"
+      },
+      "program4_days": {
+        "name": "Vorklimatisierungsprogramm 4 Tage"
       }
     },
     "time": {
       "battery_charging_start": {
         "name": "Start des Batterieladevorgangs"
+      },
+      "program1_time": {
+        "name": "Vorklimatisierungsprogramm 1 Zeit"
+      },
+      "program2_time": {
+        "name": "Vorklimatisierungsprogramm 2 Zeit"
+      },
+      "program3_time": {
+        "name": "Vorklimatisierungsprogramm 3 Zeit"
+      },
+      "program4_time": {
+        "name": "Vorklimatisierungsprogramm 4 Zeit"
       }
     }
   },
