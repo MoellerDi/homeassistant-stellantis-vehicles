@@ -58,6 +58,8 @@ def date_from_pt_string(pt_string, start_date=None):
         start_date = get_datetime()
     try:
         time = time_from_pt_string(pt_string)
+        if time is None:
+            return None
         return start_date + timedelta(hours=time.hour, minutes=time.minute)
 
     except Exception as e:
