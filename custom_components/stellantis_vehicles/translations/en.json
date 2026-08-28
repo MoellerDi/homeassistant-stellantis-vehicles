@@ -337,29 +337,29 @@
       "preconditioning_stop": {
         "name": "Preconditioning stop"
       },
-      "program1_send": {
-        "name": "Send preconditioning program 1"
+      "preconditioning_p1_send": {
+        "name": "Preconditioning P1 send"
       },
-      "program2_send": {
-        "name": "Send preconditioning program 2"
+      "preconditioning_p2_send": {
+        "name": "Preconditioning P2 send"
       },
-      "program3_send": {
-        "name": "Send preconditioning program 3"
+      "preconditioning_p3_send": {
+        "name": "Preconditioning P3 send"
       },
-      "program4_send": {
-        "name": "Send preconditioning program 4"
+      "preconditioning_p4_send": {
+        "name": "Preconditioning P4 send"
       },
-      "program1_read": {
-        "name": "Read preconditioning program 1"
+      "preconditioning_p1_reset": {
+        "name": "Preconditioning P1 reset"
       },
-      "program2_read": {
-        "name": "Read preconditioning program 2"
+      "preconditioning_p2_reset": {
+        "name": "Preconditioning P2 reset"
       },
-      "program3_read": {
-        "name": "Read preconditioning program 3"
+      "preconditioning_p3_reset": {
+        "name": "Preconditioning P3 reset"
       },
-      "program4_read": {
-        "name": "Read preconditioning program 4"
+      "preconditioning_p4_reset": {
+        "name": "Preconditioning P4 reset"
       }
     },
     "device_tracker": {
@@ -402,51 +402,51 @@
       "battery_values_correction": {
         "name": "Battery values correction"
       },
-      "program1_enabled": {
-        "name": "Preconditioning program 1"
+      "preconditioning_p1_enabled": {
+        "name": "Preconditioning P1"
       },
-      "program2_enabled": {
-        "name": "Preconditioning program 2"
+      "preconditioning_p2_enabled": {
+        "name": "Preconditioning P2"
       },
-      "program3_enabled": {
-        "name": "Preconditioning program 3"
+      "preconditioning_p3_enabled": {
+        "name": "Preconditioning P3"
       },
-      "program4_enabled": {
-        "name": "Preconditioning program 4"
+      "preconditioning_p4_enabled": {
+        "name": "Preconditioning P4"
       }
     },
     "text": {
       "abrp_token": {
         "name": "ABRP token"
       },
-      "program1_days": {
-        "name": "Preconditioning program 1 days"
+      "preconditioning_p1_days": {
+        "name": "Preconditioning P1 days"
       },
-      "program2_days": {
-        "name": "Preconditioning program 2 days"
+      "preconditioning_p2_days": {
+        "name": "Preconditioning P2 days"
       },
-      "program3_days": {
-        "name": "Preconditioning program 3 days"
+      "preconditioning_p3_days": {
+        "name": "Preconditioning P3 days"
       },
-      "program4_days": {
-        "name": "Preconditioning program 4 days"
+      "preconditioning_p4_days": {
+        "name": "Preconditioning P4 days"
       }
     },
     "time": {
       "battery_charging_start": {
         "name": "Battery charging start"
       },
-      "program1_time": {
-        "name": "Preconditioning program 1 time"
+      "preconditioning_p1_time": {
+        "name": "Preconditioning P1 time"
       },
-      "program2_time": {
-        "name": "Preconditioning program 2 time"
+      "preconditioning_p2_time": {
+        "name": "Preconditioning P2 time"
       },
-      "program3_time": {
-        "name": "Preconditioning program 3 time"
+      "preconditioning_p3_time": {
+        "name": "Preconditioning P3 time"
       },
-      "program4_time": {
-        "name": "Preconditioning program 4 time"
+      "preconditioning_p4_time": {
+        "name": "Preconditioning P4 time"
       }
     }
   },

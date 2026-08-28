@@ -45,9 +45,9 @@ async def async_setup_entry(hass:HomeAssistant, entry, async_add_entities) -> No
             if stellantis.remote_commands:
                 for slot in PRECONDITIONING_PROGRAM_SLOTS:
                     description = TextEntityDescription(
-                        name = f"program{slot}_days",
-                        key = f"program{slot}_days",
-                        translation_key = f"program{slot}_days",
+                        name = f"preconditioning_p{slot}_days",
+                        key = f"preconditioning_p{slot}_days",
+                        translation_key = f"preconditioning_p{slot}_days",
                         icon = "mdi:calendar-week",
                         pattern = DAYS_PATTERN
                     )

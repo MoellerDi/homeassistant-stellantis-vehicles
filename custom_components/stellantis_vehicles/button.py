@@ -90,20 +90,20 @@ async def async_setup_entry(hass:HomeAssistant, entry, async_add_entities) -> No
         if coordinator.vehicle_type in [VEHICLE_TYPE_ELECTRIC, VEHICLE_TYPE_HYBRID]:
             for slot in PRECONDITIONING_PROGRAM_SLOTS:
                 description = ButtonEntityDescription(
-                    name = f"program{slot}_send",
-                    key = f"program{slot}_send",
-                    translation_key = f"program{slot}_send",
+                    name = f"preconditioning_p{slot}_send",
+                    key = f"preconditioning_p{slot}_send",
+                    translation_key = f"preconditioning_p{slot}_send",
                     icon = "mdi:calendar-export"
                 )
                 entities.extend([StellantisPreconditioningProgramSendButton(coordinator, description, slot)])
 
                 description = ButtonEntityDescription(
-                    name = f"program{slot}_read",
-                    key = f"program{slot}_read",
-                    translation_key = f"program{slot}_read",
+                    name = f"preconditioning_p{slot}_reset",
+                    key = f"preconditioning_p{slot}_reset",
+                    translation_key = f"preconditioning_p{slot}_reset",
                     icon = "mdi:calendar-import"
                 )
-                entities.extend([StellantisPreconditioningProgramReadButton(coordinator, description, slot)])
+                entities.extend([StellantisPreconditioningProgramResetButton(coordinator, description, slot)])
 
             description = ButtonEntityDescription(
                 name = "charge_start",
@@ -169,7 +169,7 @@ class StellantisPreconditioningProgramSendButton(StellantisPreconditioningProgra
         program = self.effective_program
         await self.write_program(program["day"], program["hour"], program["minute"], program["on"])
 
-class StellantisPreconditioningProgramReadButton(StellantisPreconditioningProgramEntity, StellantisBaseButton):
+class StellantisPreconditioningProgramResetButton(StellantisPreconditioningProgramEntity, StellantisBaseButton):
     @property
     def available(self):
         """ Only available while the slot has edits that differ from the vehicle. """

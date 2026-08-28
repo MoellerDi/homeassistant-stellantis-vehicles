@@ -37,9 +37,9 @@ async def async_setup_entry(hass:HomeAssistant, entry, async_add_entities) -> No
 
             for slot in PRECONDITIONING_PROGRAM_SLOTS:
                 description = TimeEntityDescription(
-                    name = f"program{slot}_time",
-                    key = f"program{slot}_time",
-                    translation_key = f"program{slot}_time",
+                    name = f"preconditioning_p{slot}_time",
+                    key = f"preconditioning_p{slot}_time",
+                    translation_key = f"preconditioning_p{slot}_time",
                     icon = "mdi:calendar-clock"
                 )
                 entities.extend([StellantisPreconditioningProgramTime(coordinator, description, slot)])

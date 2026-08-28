@@ -337,29 +337,29 @@
       "preconditioning_stop": {
         "name": "Arrêter pré-conditionnement"
       },
-      "program1_send": {
-        "name": "Envoyer le programme de préconditionnement 1"
+      "preconditioning_p1_send": {
+        "name": "Envoyer préconditionnement P1"
       },
-      "program2_send": {
-        "name": "Envoyer le programme de préconditionnement 2"
+      "preconditioning_p2_send": {
+        "name": "Envoyer préconditionnement P2"
       },
-      "program3_send": {
-        "name": "Envoyer le programme de préconditionnement 3"
+      "preconditioning_p3_send": {
+        "name": "Envoyer préconditionnement P3"
       },
-      "program4_send": {
-        "name": "Envoyer le programme de préconditionnement 4"
+      "preconditioning_p4_send": {
+        "name": "Envoyer préconditionnement P4"
       },
-      "program1_read": {
-        "name": "Lire le programme de préconditionnement 1"
+      "preconditioning_p1_reset": {
+        "name": "Réinitialiser préconditionnement P1"
       },
-      "program2_read": {
-        "name": "Lire le programme de préconditionnement 2"
+      "preconditioning_p2_reset": {
+        "name": "Réinitialiser préconditionnement P2"
       },
-      "program3_read": {
-        "name": "Lire le programme de préconditionnement 3"
+      "preconditioning_p3_reset": {
+        "name": "Réinitialiser préconditionnement P3"
       },
-      "program4_read": {
-        "name": "Lire le programme de préconditionnement 4"
+      "preconditioning_p4_reset": {
+        "name": "Réinitialiser préconditionnement P4"
       }
     },
     "device_tracker": {
@@ -402,51 +402,51 @@
       "battery_values_correction": {
         "name": "Correction des valeurs de la batterie"
       },
-      "program1_enabled": {
-        "name": "Programme de préconditionnement 1"
+      "preconditioning_p1_enabled": {
+        "name": "Préconditionnement P1"
       },
-      "program2_enabled": {
-        "name": "Programme de préconditionnement 2"
+      "preconditioning_p2_enabled": {
+        "name": "Préconditionnement P2"
       },
-      "program3_enabled": {
-        "name": "Programme de préconditionnement 3"
+      "preconditioning_p3_enabled": {
+        "name": "Préconditionnement P3"
       },
-      "program4_enabled": {
-        "name": "Programme de préconditionnement 4"
+      "preconditioning_p4_enabled": {
+        "name": "Préconditionnement P4"
       }
     },
     "text": {
       "abrp_token": {
         "name": "Jeton ABRP"
       },
-      "program1_days": {
-        "name": "Programme de préconditionnement 1 jours"
+      "preconditioning_p1_days": {
+        "name": "Préconditionnement P1 jours"
       },
-      "program2_days": {
-        "name": "Programme de préconditionnement 2 jours"
+      "preconditioning_p2_days": {
+        "name": "Préconditionnement P2 jours"
       },
-      "program3_days": {
-        "name": "Programme de préconditionnement 3 jours"
+      "preconditioning_p3_days": {
+        "name": "Préconditionnement P3 jours"
       },
-      "program4_days": {
-        "name": "Programme de préconditionnement 4 jours"
+      "preconditioning_p4_days": {
+        "name": "Préconditionnement P4 jours"
       }
     },
     "time": {
       "battery_charging_start": {
         "name": "Début recharge batterie"
       },
-      "program1_time": {
-        "name": "Programme de préconditionnement 1 heure"
+      "preconditioning_p1_time": {
+        "name": "Préconditionnement P1 heure"
       },
-      "program2_time": {
-        "name": "Programme de préconditionnement 2 heure"
+      "preconditioning_p2_time": {
+        "name": "Préconditionnement P2 heure"
       },
-      "program3_time": {
-        "name": "Programme de préconditionnement 3 heure"
+      "preconditioning_p3_time": {
+        "name": "Préconditionnement P3 heure"
       },
-      "program4_time": {
-        "name": "Programme de préconditionnement 4 heure"
+      "preconditioning_p4_time": {
+        "name": "Préconditionnement P4 heure"
       }
     }
   },

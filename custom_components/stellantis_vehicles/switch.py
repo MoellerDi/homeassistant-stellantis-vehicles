@@ -39,9 +39,9 @@ async def async_setup_entry(hass:HomeAssistant, entry, async_add_entities) -> No
 
                 for slot in PRECONDITIONING_PROGRAM_SLOTS:
                     description = SwitchEntityDescription(
-                        name = f"program{slot}_enabled",
-                        key = f"program{slot}_enabled",
-                        translation_key = f"program{slot}_enabled",
+                        name = f"preconditioning_p{slot}_enabled",
+                        key = f"preconditioning_p{slot}_enabled",
+                        translation_key = f"preconditioning_p{slot}_enabled",
                         icon = "mdi:calendar-check"
                     )
                     entities.extend([StellantisPreconditioningProgramSwitch(coordinator, description, slot)])
