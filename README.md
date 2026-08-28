@@ -180,17 +180,21 @@ As described in the Stellantis apps, the command is enabled when:
 3. The battery level is at least ~~50% (20% for hybrids)~~ 20% or in charging ([#226](https://github.com/andreadegiovine/homeassistant-stellantis-vehicles/issues/226));
 
 ### Air conditioning programs
-The vehicle stores four preconditioning programs. Each one is exposed as three entities, for the first program:
+The vehicle stores four preconditioning programs. Each one is exposed as five entities, for the first program:
 
-- **time.#####VIN#####_preconditioning_program_1_time**
-- **text.#####VIN#####_preconditioning_program_1_days**, a comma separated list built from `Mon,Tue,Wed,Thu,Fri,Sat,Sun`
-- **switch.#####VIN#####_preconditioning_program_1**
+- **time.#####VIN#####_preconditioning_p1_time**
+- **text.#####VIN#####_preconditioning_p1_days**, a comma separated list built from `Mon,Tue,Wed,Thu,Fri,Sat,Sun`
+- **switch.#####VIN#####_preconditioning_p1**
+- **button.#####VIN#####_preconditioning_p1_send**
+- **button.#####VIN#####_preconditioning_p1_reset**
+
+Editing the time, days or switch only stages the change locally, it is not sent to the vehicle yet. The send button writes the staged program to the vehicle; the reset button discards the staged change and shows the values currently reported by the vehicle. Both buttons are only available while the program has a staged change.
 
 The time is the time the vehicle should be ready, not the time preconditioning starts. The vehicle decides how long in advance to start. Measured on one car: a program written at 17:59 with a time of 18:30 started preconditioning at 18:00 and stopped it at 18:31. Enabling a program whose time is nearer than the vehicle's lead time therefore starts preconditioning immediately.
 
 A program can only be enabled once it has a time and at least one day. Writing a program is refused while preconditioning is running, because the write reuses the preconditioning command and could stop the running session.
 
-The same values can be set from an automation:
+The same values can be set from an automation. This bypasses the staging step and writes straight to the vehicle:
 
 ```yaml
 actions:

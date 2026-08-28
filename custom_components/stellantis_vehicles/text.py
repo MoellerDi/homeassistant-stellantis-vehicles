@@ -44,9 +44,9 @@ async def async_setup_entry(hass:HomeAssistant, entry, async_add_entities) -> No
             if stellantis.remote_commands:
                 for slot in PRECONDITIONING_PROGRAM_SLOTS:
                     description = TextEntityDescription(
-                        name = f"program{slot}_days",
-                        key = f"program{slot}_days",
-                        translation_key = f"program{slot}_days",
+                        name = f"preconditioning_p{slot}_days",
+                        key = f"preconditioning_p{slot}_days",
+                        translation_key = f"preconditioning_p{slot}_days",
                         icon = "mdi:calendar-week",
                         pattern = DAYS_PATTERN
                     )
@@ -62,7 +62,7 @@ class StellantisPreconditioningProgramDays(StellantisPreconditioningProgramEntit
         return self._coordinator._sensors.get(self._sensor_key, "")
 
     async def async_set_value(self, value: str):
-        """ Stage the days locally; sent to the vehicle with the send program button. """
+        """ Stage the days locally; sent to the vehicle with the send button. """
         days = preconditioning_days_from_string(value)
         self._coordinator._sensors[self._sensor_key] = preconditioning_days_to_string(days)
         self._coordinator.stage_program(self._slot, day=days)

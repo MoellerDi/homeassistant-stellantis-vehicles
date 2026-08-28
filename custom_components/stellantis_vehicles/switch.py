@@ -38,9 +38,9 @@ async def async_setup_entry(hass:HomeAssistant, entry, async_add_entities) -> No
 
                 for slot in PRECONDITIONING_PROGRAM_SLOTS:
                     description = SwitchEntityDescription(
-                        name = f"program{slot}_enabled",
-                        key = f"program{slot}_enabled",
-                        translation_key = f"program{slot}_enabled",
+                        name = f"preconditioning_p{slot}_enabled",
+                        key = f"preconditioning_p{slot}_enabled",
+                        translation_key = f"preconditioning_p{slot}_enabled",
                         icon = "mdi:calendar-check"
                     )
                     entities.extend([StellantisPreconditioningProgramSwitch(coordinator, description, slot)])
@@ -85,13 +85,13 @@ class StellantisPreconditioningProgramSwitch(StellantisPreconditioningProgramEnt
         return bool(self._coordinator._sensors.get(self._sensor_key, False))
 
     async def async_turn_on(self, **kwargs):
-        """ Stage the enabled flag; sent to the vehicle with the send program button. """
+        """ Stage the enabled flag; sent to the vehicle with the send button. """
         self._coordinator._sensors[self._sensor_key] = True
         self._coordinator.stage_program(self._slot, on=1)
         self._coordinator.async_update_listeners()
 
     async def async_turn_off(self, **kwargs):
-        """ Stage the disabled flag; sent to the vehicle with the send program button. """
+        """ Stage the disabled flag; sent to the vehicle with the send button. """
         self._coordinator._sensors[self._sensor_key] = False
         self._coordinator.stage_program(self._slot, on=0)
         self._coordinator.async_update_listeners()

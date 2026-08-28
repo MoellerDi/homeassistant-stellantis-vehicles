@@ -36,9 +36,9 @@ async def async_setup_entry(hass:HomeAssistant, entry, async_add_entities) -> No
 
             for slot in PRECONDITIONING_PROGRAM_SLOTS:
                 description = TimeEntityDescription(
-                    name = f"program{slot}_time",
-                    key = f"program{slot}_time",
-                    translation_key = f"program{slot}_time",
+                    name = f"preconditioning_p{slot}_time",
+                    key = f"preconditioning_p{slot}_time",
+                    translation_key = f"preconditioning_p{slot}_time",
                     icon = "mdi:calendar-clock"
                 )
                 entities.extend([StellantisPreconditioningProgramTime(coordinator, description, slot)])
@@ -71,7 +71,7 @@ class StellantisBatteryChargingStart(StellantisBaseTime):
 
 class StellantisPreconditioningProgramTime(StellantisPreconditioningProgramEntity, StellantisBaseTime):
     async def async_set_value(self, value):
-        """ Stage the time locally; sent to the vehicle with the send program button. """
+        """ Stage the time locally; sent to the vehicle with the send button. """
         self._coordinator._sensors[self._sensor_key] = value
         self._coordinator.stage_program(self._slot, hour=value.hour, minute=value.minute)
         self._coordinator.async_update_listeners()
