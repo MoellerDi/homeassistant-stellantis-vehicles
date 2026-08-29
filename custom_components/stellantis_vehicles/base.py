@@ -221,10 +221,11 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
 
     @property
     def preconditioning_data(self):
-        """ Preconditioning data of the vehicle. The API spells the key with two n. """
+        """Preconditioning data of the vehicle."""
         # The section may be missing or explicitly null, and the same is true for
         # its "airConditioning" child, so every step is guarded.
-        data = self._data.get("preconditionning") or self._data.get("preconditioning") or {}
+        # The API spells the key with two n. Some vehicles have it with one n, so both are checked.
+        data = self._data.get("preconditioning") or self._data.get("preconditionning") or {}
         air_conditioning = data.get("airConditioning") if isinstance(data, dict) else None
         return air_conditioning if isinstance(air_conditioning, dict) else {}
 
