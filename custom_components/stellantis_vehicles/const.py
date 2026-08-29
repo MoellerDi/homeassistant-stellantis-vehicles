@@ -141,6 +141,16 @@ COMMAND_HISTORY_LIMIT = 50
 # retried every ~15 min instead of once a minute.
 MQTT_TOKEN_RETRY_BACKOFF = (60, 120, 300, 600, 900)
 
+# Debug helper: when True, get_user_vehicles() appends a synthetic clone of the
+# first real account vehicle - same payload, but with FAKE_VEHICLE_VIN - so the
+# stale-config prune and removed-vehicle detection flows can be exercised
+# without unpairing a real car. Set it back to False to make the fake vehicle
+# "disappear" on the next refresh. Never ship a release with this enabled.
+DEBUG_FAKE_VEHICLE = False
+# 17-char alphanumeric so it passes the VIN-shape checks the config migration
+# and prune logic use, while never matching a VIN the account can return.
+FAKE_VEHICLE_VIN = "FAKEVIN0000000000"
+
 VEHICLE_TYPE_ELECTRIC = "Electric"
 VEHICLE_TYPE_HYBRID = "Hybrid"
 VEHICLE_TYPE_THERMIC = "Thermic"
