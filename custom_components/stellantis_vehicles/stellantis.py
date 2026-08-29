@@ -46,6 +46,8 @@ from .const import (
     CAR_API_VEHICLES_URL,
     CLIENT_ID_QUERY_PARAMS,
     CAR_API_HEADERS,
+    DEBUG_FAKE_VEHICLE,
+    FAKE_VEHICLE_VIN,
     CAR_API_GET_VEHICLE_STATUS_URL,
     GET_OTP_URL,
     GET_OTP_HEADERS,
@@ -445,6 +447,7 @@ class StellantisVehicles(StellantisOauth):
         self._entry = None
         self._coordinator_dict = {}
         self._vehicles = []
+        self._fake_vehicle_added = False
         self._mqtt = None
         self._mqtt_last_request = None
 
@@ -498,6 +501,33 @@ class StellantisVehicles(StellantisOauth):
         self._config["vehicles"] = deepcopy(new_vehicles)
         _LOGGER.info("Removed stored config for vehicles no longer on the account: %s", ", ".join(stale))
         return stale
+
+    def add_fake_vehicle(self, vin=FAKE_VEHICLE_VIN):
+        """Append a synthetic vehicle cloned from the first real one.
+
+        Testing helper for the stale-config prune and removed-vehicle
+        detection flows: it yields an extra vehicle that looks real to the
+        rest of the integration but carries a VIN the account will never
+        return. The fake vehicle is injected only on the first call - any
+        later (forced) refresh rebuilds the list without it, so it "vanishes"
+        from the account and the removed-vehicle path can run. Returns the
+        fake vehicle dict on that first call, otherwise None.
+        """
+        if self._fake_vehicle_added:
+            return None
+        if not self._vehicles:
+            _LOGGER.warning("add_fake_vehicle: no real vehicle to clone from")
+            return None
+        self._fake_vehicle_added = True
+        source = self._vehicles[0]
+        fake_vehicle = deepcopy(source)
+        fake_vehicle["vin"] = vin
+        fake_vehicle["vehicle_id"] = f"fake-{vin}"
+        self._vehicles.append(fake_vehicle)
+        self.logger_filter.add_custom_value(fake_vehicle["vin"])
+        self.logger_filter.add_custom_value(fake_vehicle["vehicle_id"])
+        _LOGGER.warning("add_fake_vehicle: injected fake vehicle %s cloned from %s", vin, source["vin"])
+        return fake_vehicle
 
     def async_get_coordinator_by_vin(self, vin):
         if vin in self._coordinator_dict:
@@ -670,6 +700,8 @@ class StellantisVehicles(StellantisOauth):
                     _LOGGER.warning("No vehicles found in vehicles_request['_embedded']")
             else:
                 _LOGGER.warning("No _embedded found in vehicles_request")
+        if DEBUG_FAKE_VEHICLE:
+            self.add_fake_vehicle()
         return self._vehicles
 
     @log_call
