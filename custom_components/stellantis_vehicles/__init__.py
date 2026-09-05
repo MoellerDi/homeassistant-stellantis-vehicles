@@ -6,11 +6,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import issue_registry, device_registry as dr
+from homeassistant.helpers.typing import ConfigType
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 
 from .stellantis import StellantisVehicles
 from .config_flow import StellantisVehiclesConfigFlow
+from .services import async_setup_services
 
 from .const import (
     DOMAIN,
@@ -23,6 +25,13 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """ Set up the Stellantis Vehicles integration. """
+    async_setup_services(hass)
+    return True
+
 
 async def async_setup_entry(hass: HomeAssistant, config: ConfigEntry):
 

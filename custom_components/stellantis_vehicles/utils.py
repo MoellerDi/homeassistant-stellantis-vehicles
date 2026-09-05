@@ -1,17 +1,22 @@
 import asyncio
 import logging
 from collections import deque
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from time import monotonic
 from functools import wraps
 import re
 from typing import Any, Dict
 
 from homeassistant.util import dt
+from homeassistant.exceptions import ServiceValidationError
 
 from .exceptions import RateLimitException
 from .const import (
-    FIELD_ANONYMIZE_LOGS
+    DOMAIN,
+    FIELD_ANONYMIZE_LOGS,
+    PRECONDITIONING_PROGRAM_DAYS,
+    PRECONDITIONING_PROGRAM_DISABLED_HOUR,
+    PRECONDITIONING_PROGRAM_DISABLED_MINUTE
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -27,14 +32,18 @@ def datetime_from_isoformat(string):
     return get_datetime(datetime.fromisoformat(string))
 
 def time_from_pt_string(pt_string):
-    regex = 'PT'
-    if pt_string.find("H") != -1:
-        regex = regex + "%HH"
-    if pt_string.find("M") != -1:
-        regex = regex + "%MM"
-    if pt_string.find("S") != -1:
-        regex = regex + "%SS"
-    return datetime.strptime(pt_string, regex).time()
+    try:
+        regex = 'PT'
+        if pt_string.find("H") != -1:
+            regex = regex + "%HH"
+        if pt_string.find("M") != -1:
+            regex = regex + "%MM"
+        if pt_string.find("S") != -1:
+            regex = regex + "%SS"
+        return datetime.strptime(pt_string, regex).time()
+    except (AttributeError, TypeError, ValueError) as e:
+        _LOGGER.warning("Could not parse duration '%s': %s", pt_string, e)
+        return None
 
 def time_from_string(string):
     return datetime.strptime(string, "%H:%M:%S").time()
@@ -44,11 +53,41 @@ def date_from_pt_string(pt_string, start_date=None):
         start_date = get_datetime()
     try:
         time = time_from_pt_string(pt_string)
+        if time is None:
+            return None
         return start_date + timedelta(hours=time.hour, minutes=time.minute)
 
     except Exception as e:
         _LOGGER.warning(str(e))
         return None
+
+def preconditioning_days_from_string(string):
+    """ Convert a "Mon,Tue" day list to the 7 items day mask used by the API. """
+    days = [0] * len(PRECONDITIONING_PROGRAM_DAYS)
+    for name in str(string).split(","):
+        name = name.strip().capitalize()
+        if not name:
+            continue
+        if name not in PRECONDITIONING_PROGRAM_DAYS:
+            raise ServiceValidationError(
+                translation_domain = DOMAIN,
+                translation_key = "preconditioning_program_invalid_day",
+                translation_placeholders = {"day": name, "days": ", ".join(PRECONDITIONING_PROGRAM_DAYS)}
+            )
+        days[PRECONDITIONING_PROGRAM_DAYS.index(name)] = 1
+    return days
+
+def preconditioning_days_to_string(days):
+    """ Convert the 7 items day mask used by the API to a "Mon,Tue" day list. """
+    return ",".join([name for index, name in enumerate(PRECONDITIONING_PROGRAM_DAYS) if days[index]])
+
+def preconditioning_program_time(program):
+    """ Program time, None when the slot holds the disabled placeholder. """
+    hour = int(program.get("hour", PRECONDITIONING_PROGRAM_DISABLED_HOUR))
+    minute = int(program.get("minute", PRECONDITIONING_PROGRAM_DISABLED_MINUTE))
+    if hour > 23 or minute > 59:
+        return None
+    return time(hour, minute)
 
 def replace_string_placeholders(string, placeholders=None):
     if placeholders is None:

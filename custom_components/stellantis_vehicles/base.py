@@ -16,10 +16,10 @@ from homeassistant.components.time import TimeEntity
 from homeassistant.core import callback, HomeAssistant
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.const import ( STATE_UNAVAILABLE, STATE_UNKNOWN, STATE_ON, STATE_OFF)
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ( ConfigEntryAuthFailed, ServiceValidationError )
 from homeassistant.helpers import issue_registry as ir
 
-from .utils import ( time_from_pt_string, get_datetime, date_from_pt_string, time_from_string, rate_limit, log_call )
+from .utils import ( time_from_pt_string, get_datetime, date_from_pt_string, time_from_string, rate_limit, log_call, preconditioning_program_time )
 
 from .const import (
     DOMAIN,
@@ -28,7 +28,13 @@ from .const import (
     VEHICLE_TYPE_HYBRID,
     UPDATE_INTERVAL,
     EMPTY_STATUS_LIMIT,
-    KWH_CORRECTION
+    KWH_CORRECTION,
+    PRECONDITIONING_SERVICE,
+    PRECONDITIONING_PROGRAM_ASAP,
+    PRECONDITIONING_PROGRAM_SLOTS,
+    PRECONDITIONING_PROGRAM_DAYS,
+    PRECONDITIONING_PROGRAM_DISABLED_HOUR,
+    PRECONDITIONING_PROGRAM_DISABLED_MINUTE
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -53,6 +59,12 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         self._privacy_full_logged = False
         self._empty_status_count = 0
         self._vehicle_removed = False
+        self._dropped_programs = set()
+        self._programs_cache = None
+        # Preconditioning program edits that differ from the vehicle and are held
+        # locally until the user sends them with the send button or drops them
+        # with the reset button.
+        self._pending_programs = {}
 
         if self._stellantis.logger_filter:
             _LOGGER.addFilter(self._stellantis.logger_filter)
@@ -215,6 +227,21 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         }
 
     @property
+    def preconditioning_data(self):
+        """Preconditioning data of the vehicle."""
+        # The section may be missing or explicitly null, and the same is true for
+        # its "airConditioning" child, so every step is guarded.
+        # The API spells the key with two n. Some vehicles have it with one n, so both are checked.
+        data = self._data.get("preconditioning") or self._data.get("preconditionning") or {}
+        air_conditioning = data.get("airConditioning") if isinstance(data, dict) else None
+        return air_conditioning if isinstance(air_conditioning, dict) else {}
+
+    @property
+    def preconditioning_is_running(self):
+        """ Preconditioning running state. """
+        return self.preconditioning_data.get("status") == "Enabled"
+
+    @property
     def pending_action(self):
         """ Pending action. """
         if not self._commands_history:
@@ -278,42 +305,120 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         await self.send_command(button_name, "/VehCharge", {"program": {"hour": current_hour.hour, "minute": current_hour.minute}, "type": action})
 
     def get_programs(self):
-        """ Get current preconditioning programs. """
+        """ Get current preconditioning programs.
+
+        Called for every program entity on every coordinator update, so the
+        result is cached per ``self._data`` object and only recomputed when the
+        vehicle data is replaced by a refresh.
+        """
+        if self._programs_cache is not None and self._programs_cache[0] is self._data:
+            return deepcopy(self._programs_cache[1])
+        programs = self._compute_programs()
+        self._programs_cache = (self._data, programs)
+        return deepcopy(programs)
+
+    def _compute_programs(self):
+        """ Build the preconditioning program map from the raw vehicle data. """
         default_programs = {
-           "program1": {"day": [0, 0, 0, 0, 0, 0, 0], "hour": 34, "minute": 7, "on": 0},
-           "program2": {"day": [0, 0, 0, 0, 0, 0, 0], "hour": 34, "minute": 7, "on": 0},
-           "program3": {"day": [0, 0, 0, 0, 0, 0, 0], "hour": 34, "minute": 7, "on": 0},
-           "program4": {"day": [0, 0, 0, 0, 0, 0, 0], "hour": 34, "minute": 7, "on": 0}
+            f"program{slot}": {
+                "day": [0, 0, 0, 0, 0, 0, 0],
+                "hour": PRECONDITIONING_PROGRAM_DISABLED_HOUR,
+                "minute": PRECONDITIONING_PROGRAM_DISABLED_MINUTE,
+                "on": 0,
+            }
+            for slot in PRECONDITIONING_PROGRAM_SLOTS
         }
-        active_programs = None
-        if "programs" in self._data["preconditionning"]["airConditioning"]:
-            current_programs = self._data["preconditionning"]["airConditioning"]["programs"]
-            if current_programs:
-                for program in current_programs:
-                    if program:
-                        occurence = program.get("occurence")
-                        if occurence and occurence.get("day") and program.get("start"):
-                            date = time_from_pt_string(program["start"])
-                            config = {
-                                "day": [
-                                    int("Mon" in occurence["day"]),
-                                    int("Tue" in occurence["day"]),
-                                    int("Wed" in occurence["day"]),
-                                    int("Thu" in occurence["day"]),
-                                    int("Fri" in occurence["day"]),
-                                    int("Sat" in occurence["day"]),
-                                    int("Sun" in occurence["day"])
-                                ],
-                                "hour": date.hour,
-                                "minute": date.minute,
-                                "on": int(program["enabled"])
-                            }
-                            default_programs["program" + str(program["slot"])] = config
+        for program in self.preconditioning_data.get("programs") or []:
+            if not program:
+                continue
+            try:
+                slot = int(program.get("slot"))
+            except (TypeError, ValueError):
+                continue
+            if slot not in PRECONDITIONING_PROGRAM_SLOTS:
+                continue
+            occurence = program.get("occurence") or {}
+            start = program.get("start")
+            date = time_from_pt_string(start) if start else None
+            if occurence.get("day") and date is not None:
+                default_programs[f"program{slot}"] = {
+                    "day": [int(name in occurence["day"]) for name in PRECONDITIONING_PROGRAM_DAYS],
+                    "hour": date.hour,
+                    "minute": date.minute,
+                    "on": int(program.get("enabled", 0)),
+                }
+                self._dropped_programs.discard(slot)
+            elif (start or occurence.get("day")) and slot not in self._dropped_programs:
+                # A partially defined program (a weekday recurrence or a start
+                # time, but not both, or a start time that cannot be parsed)
+                # cannot be represented here, so it is replaced by the disabled
+                # placeholder. Every preconditioning command posts the full set
+                # of programs back to the vehicle, which means such a program is
+                # deleted the next time any of them is sent. An empty or fully
+                # disabled slot is expected and stays silent.
+                self._dropped_programs.add(slot)
+                _LOGGER.info("Preconditioning program %s of vehicle '%s' is incomplete and cannot be read, it will be deleted by the next preconditioning command: %s", slot, self._vehicle["vin"], program)
         return default_programs
+
+    def get_staged_program(self, slot):
+        """ Locally staged field edits for a program slot that differ from the vehicle. """
+        return self._pending_programs.get(slot, {})
+
+    def stage_program(self, slot, **fields):
+        """ Record program field edits locally.
+
+        A field whose new value matches the vehicle is not staged (and drops any
+        earlier stage of it), so a slot only has staged edits while the shown
+        values really differ from the vehicle. Staged edits are held until the
+        user sends them with the send button or drops them with the reset button.
+        """
+        vehicle_program = self.get_programs()[f"program{slot}"]
+        pending = self._pending_programs.setdefault(slot, {})
+        for key, value in fields.items():
+            if value == vehicle_program.get(key):
+                pending.pop(key, None)
+            else:
+                pending[key] = value
+        if not pending:
+            self._pending_programs.pop(slot, None)
+
+    def clear_staged_program(self, slot):
+        """ Drop the staged edits for a program slot. """
+        self._pending_programs.pop(slot, None)
+
+    def effective_program(self, slot):
+        """ Program of a slot with any staged edits applied on top. """
+        return {**self.get_programs()[f"program{slot}"], **self.get_staged_program(slot)}
 
     async def send_preconditioning_command(self, button_name, action):
         """ Send preconditioning command to the vehicle. """
-        await self.send_command(button_name, "/ThermalPrecond", {"asap": action, "programs": self.get_programs()})
+        await self.send_command(button_name, PRECONDITIONING_SERVICE, {"asap": action, "programs": self.get_programs()})
+
+    async def send_preconditioning_program(self, button_name, slot, day, hour, minute, on):
+        """ Write one preconditioning program slot to the vehicle.
+
+        The vehicle stores all four slots in a single payload, so the other three
+        are read back and posted unchanged.
+        """
+        if self.preconditioning_is_running:
+            _LOGGER.warning("Preconditioning is running on vehicle '%s', program %s was not written", self._vehicle["vin"], slot)
+            raise ServiceValidationError(
+                translation_domain = DOMAIN,
+                translation_key = "preconditioning_program_running"
+            )
+        if on and preconditioning_program_time({"hour": hour, "minute": minute}) is None:
+            raise ServiceValidationError(
+                translation_domain = DOMAIN,
+                translation_key = "preconditioning_program_time_missing"
+            )
+        if on and not any(day):
+            raise ServiceValidationError(
+                translation_domain = DOMAIN,
+                translation_key = "preconditioning_program_days_missing"
+            )
+        programs = self.get_programs()
+        programs[f"program{slot}"] = {"day": day, "hour": hour, "minute": minute, "on": int(on)}
+        await self.send_command(button_name, PRECONDITIONING_SERVICE, {"asap": PRECONDITIONING_PROGRAM_ASAP, "programs": programs})
 
     async def send_abrp_data(self):
         """ Send vehicle data to ABRP. """
@@ -946,3 +1051,47 @@ class StellantisBaseTime(StellantisRestoreEntity, TimeEntity):
         if self._sensor_key in self._coordinator._sensors:
             return self._coordinator._sensors.get(self._sensor_key)
         return None
+
+
+class StellantisPreconditioningProgramEntity:
+    """ Shared behaviour of the preconditioning program entities.
+
+    Each entity owns one field of one program slot. The days, time and switch
+    entities only stage their value locally. The staged slot is sent to the
+    vehicle with the send button or discarded with the reset button; both
+    buttons are only available while a slot has staged edits.
+    """
+    def __init__(self, coordinator, description, slot) -> None:
+        super().__init__(coordinator, description)
+        self._slot = slot
+
+    @property
+    def available(self):
+        """ Available. """
+        return self.available_command and self.has_program_data
+
+    @property
+    def program(self):
+        """ Current program of the slot owned by this entity, as read from the vehicle. """
+        return self._coordinator.get_programs()[f"program{self._slot}"]
+
+    @property
+    def staged_program(self):
+        """ Locally staged, not-yet-sent field edits for this slot. """
+        return self._coordinator.get_staged_program(self._slot)
+
+    @property
+    def effective_program(self):
+        """ Vehicle program with any staged edits applied on top. """
+        return self._coordinator.effective_program(self._slot)
+
+    @property
+    def has_program_data(self):
+        """ True when the vehicle data contains the preconditioning programs. """
+        return bool(self._coordinator.preconditioning_data)
+
+    async def write_program(self, day, hour, minute, on):
+        """ Send the slot owned by this entity to the vehicle and drop staged edits. """
+        await self._coordinator.send_preconditioning_program(self.name, self._slot, day, hour, minute, on)
+        self._coordinator.clear_staged_program(self._slot)
+        await self._coordinator.async_refresh()
