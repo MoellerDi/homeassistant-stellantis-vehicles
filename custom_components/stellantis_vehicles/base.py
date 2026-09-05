@@ -20,6 +20,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import issue_registry as ir
 
 from .utils import ( time_from_pt_string, get_datetime, date_from_pt_string, time_from_string, rate_limit )
+from .vin import ( get_brand_from_vin, get_model_from_vin )
 
 from .const import (
     DOMAIN,
@@ -477,13 +478,15 @@ class StellantisBaseEntity(CoordinatorEntity):
     @property
     def device_info(self):
         """ Core device info. """
+        vin = self._vehicle["vin"]
+        engine_label = self._coordinator.get_translation(f"component.stellantis_vehicles.entity.sensor.type.state.{self._vehicle["type"].lower()}", self._vehicle["type"])
         return {
             "identifiers": {
-                (DOMAIN, self._vehicle["vin"], self._vehicle["type"])
+                (DOMAIN, vin, self._vehicle["type"])
             },
-            "name": self._vehicle["vin"],
-            "model": self._coordinator.get_translation(f"component.stellantis_vehicles.entity.sensor.type.state.{self._vehicle["type"].lower()}", self._vehicle["type"]) + " - " + self._vehicle["vin"],
-            "manufacturer": self._config[FIELD_MOBILE_APP]
+            "name": vin,
+            "model": get_model_from_vin(vin) or f"{engine_label} - {vin}",
+            "manufacturer": self._vehicle.get("brand") or get_brand_from_vin(vin) or self._config[FIELD_MOBILE_APP]
         }
 
     def value_was_updated(self):
