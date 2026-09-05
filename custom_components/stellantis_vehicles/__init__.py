@@ -196,15 +196,15 @@ async def async_migrate_entry(hass: HomeAssistant, config: ConfigEntry):
         # Migrate to new file structure - generate path to storage folder and move OTP file
         hass_config_path = hass.config.path()
         old_otp_file_path = os.path.join(hass_config_path, ".storage/stellantis_vehicles_otp.pickle")
-        new_storage_path = os.path.join(hass_config_path, ".storage", DOMAIN)
-        new_otp_file_path = os.path.join(new_storage_path, OTP_FILENAME)
-        new_otp_file_path = new_otp_file_path.replace("{#customer_id#}", new_unique_id)
 
         def migrate_otp_file():
             # Run the blocking filesystem work on an executor thread so it never
             # stalls the event loop - matches the later migration steps.
             if not os.path.isfile(old_otp_file_path):
                 return
+            new_storage_path = os.path.join(hass_config_path, ".storage", DOMAIN)
+            new_otp_file_path = os.path.join(new_storage_path, OTP_FILENAME)
+            new_otp_file_path = new_otp_file_path.replace("{#customer_id#}", new_unique_id)
             if not os.path.isdir(new_storage_path):
                 os.mkdir(new_storage_path)
             if not os.path.isfile(new_otp_file_path):
