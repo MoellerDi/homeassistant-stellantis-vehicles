@@ -138,33 +138,39 @@ async def async_remove_entry(hass: HomeAssistant, config: ConfigEntry) -> None:
         for _entry in hass.config_entries.async_entries(DOMAIN):
             hass.async_create_task(hass.config_entries.async_remove(_entry.entry_id))
 
-        # Gennerate path to storage folder and OTP file
+        # Generate path to storage folder and OTP file
         hass_config_path = hass.config.path()
         storage_path = os.path.join(hass_config_path, ".storage", DOMAIN)
         otp_file_path = os.path.join(storage_path, OTP_FILENAME)
         otp_file_path = otp_file_path.replace("{#customer_id#}", config.unique_id)
-
-        # Remove OTP file if it exists
-        if os.path.isfile(otp_file_path):
-            _LOGGER.debug("Deleting OTP file: %s", otp_file_path)
-            os.remove(otp_file_path)
-
-        # Remove storage folder if empty
-        if os.path.exists(storage_path) and os.path.isdir(storage_path) and not os.listdir(storage_path):
-            _LOGGER.debug("Deleting empty Stellantis storage folder: %s", storage_path)
-            shutil.rmtree(storage_path)
-
-        # Remove Stellantis image folder of this entry
         entry_image_path = os.path.join(hass_config_path, "www", DOMAIN, config.unique_id)
-        if os.path.exists(entry_image_path) and os.path.isdir(entry_image_path):
-            _LOGGER.debug("Deleting Stellantis entry image folder: %s", entry_image_path)
-            shutil.rmtree(entry_image_path)
-
-        # Remove Stellantis image folder if empty
         image_path = os.path.join(hass_config_path, "www", DOMAIN)
-        if os.path.exists(image_path) and os.path.isdir(image_path) and not os.listdir(image_path):
-            _LOGGER.debug("Deleting Stellantis image folder: %s", image_path)
-            shutil.rmtree(image_path)
+
+        def cleanup_files():
+            # Run the blocking filesystem work on an executor thread so it never
+            # stalls the event loop - matches the async_migrate_entry steps.
+
+            # Remove OTP file if it exists
+            if os.path.isfile(otp_file_path):
+                _LOGGER.debug("Deleting OTP file: %s", otp_file_path)
+                os.remove(otp_file_path)
+
+            # Remove storage folder if empty
+            if os.path.exists(storage_path) and os.path.isdir(storage_path) and not os.listdir(storage_path):
+                _LOGGER.debug("Deleting empty Stellantis storage folder: %s", storage_path)
+                shutil.rmtree(storage_path)
+
+            # Remove Stellantis image folder of this entry
+            if os.path.exists(entry_image_path) and os.path.isdir(entry_image_path):
+                _LOGGER.debug("Deleting Stellantis entry image folder: %s", entry_image_path)
+                shutil.rmtree(entry_image_path)
+
+            # Remove Stellantis image folder if empty
+            if os.path.exists(image_path) and os.path.isdir(image_path) and not os.listdir(image_path):
+                _LOGGER.debug("Deleting Stellantis image folder: %s", image_path)
+                shutil.rmtree(image_path)
+
+        await hass.async_add_executor_job(cleanup_files)
 
 
 async def async_migrate_entry(hass: HomeAssistant, config: ConfigEntry):
