@@ -16,9 +16,15 @@ Ignore the Home Assistant Core conventions from the root file — specifically:
 
 The root file's integration best practices still apply as *style* defaults (async I/O, `DataUpdateCoordinator`, entity unique IDs and `has_entity_name`, translation keys, lazy logging, specific exception types). Use them as defaults; don't block changes on Core enforcement mechanisms that don't exist here.
 
-## No automated tests
+## Tests
 
-There is no test suite (`tests/components/<domain>/`, ≥95% coverage, snapshots — none of it exists), so nothing catches a regression before release. Don't run `pytest` or assume test scaffolding; adding a suite is a substantial change — confirm with the user first. Before calling a change done, ask the user to verify it against their running Home Assistant instance (reload the integration, check logs, verify entity states) — a clean lint run is not proof the change works.
+Upstream has no test suite (no `tests/components/<domain>/`, no coverage gate, no snapshots) and CI runs none, so a green `pytest` or lint run is never proof a change works: before calling a change done, ask the user to verify it against their running Home Assistant instance (reload the integration, check logs, verify entity states).
+
+Tests we write for a change stay off the upstream-PR branch — this is the standing workflow, not a per-change decision:
+
+- The `bugfix/…` / `feature/…` branch that gets pushed to `origin` and becomes the PR stays test-free. Whether and how a suite lands upstream is the upstream author's call.
+- Put the tests in a single commit on a parallel branch named `<code-branch>-tests`, rebased to sit directly on top of the code branch. It is local only: never push it, give it no upstream tracking, and rebase it again (`git rebase <code-branch>`) every time the code branch is amended.
+- Write them as plain `pytest`, run via the local `.venv-test` (`pytest_homeassistant_custom_component` is available). Prefer standalone unit tests that need no HA harness where the code under test allows it.
 
 ## Type hints
 
