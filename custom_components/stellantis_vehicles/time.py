@@ -3,12 +3,14 @@ import logging
 from homeassistant.core import HomeAssistant
 from homeassistant.components.time import TimeEntityDescription
 
-from .base import StellantisBaseTime
+from .base import ( StellantisBaseTime, StellantisPreconditioningProgramEntity )
+from .utils import preconditioning_program_time
 
 from .const import (
     DOMAIN,
     VEHICLE_TYPE_ELECTRIC,
-    VEHICLE_TYPE_HYBRID
+    VEHICLE_TYPE_HYBRID,
+    PRECONDITIONING_PROGRAM_SLOTS
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -32,6 +34,15 @@ async def async_setup_entry(hass:HomeAssistant, entry, async_add_entities) -> No
                 icon = "mdi:battery-clock"
             )
             entities.extend([StellantisBatteryChargingStart(coordinator, description)])
+
+            for slot in PRECONDITIONING_PROGRAM_SLOTS:
+                description = TimeEntityDescription(
+                    name = f"preconditioning_p{slot}_time",
+                    key = f"preconditioning_p{slot}_time",
+                    translation_key = f"preconditioning_p{slot}_time",
+                    icon = "mdi:calendar-clock"
+                )
+                entities.extend([StellantisPreconditioningProgramTime(coordinator, description, slot)])
 
     async_add_entities(entities)
 
@@ -57,3 +68,16 @@ class StellantisBatteryChargingStart(StellantisBaseTime):
             label = self._coordinator.get_translation("component.stellantis_vehicles.entity.sensor.mileage.state_attributes.last_updated.name", "last_updated")
             self._attr_extra_state_attributes[label] = self.get_updated_at_from_map(self._updated_at_map)
             self._attr_native_value = self.get_value(self._value_map)
+
+
+class StellantisPreconditioningProgramTime(StellantisPreconditioningProgramEntity, StellantisBaseTime):
+    async def async_set_value(self, value):
+        """ Stage the time locally; sent to the vehicle with the send button. """
+        self._coordinator._sensors[self._sensor_key] = value
+        self._coordinator.stage_program(self._slot, hour=value.hour, minute=value.minute)
+        self._coordinator.async_update_listeners()
+
+    def coordinator_update(self):
+        if not self.has_program_data or self.staged_program.keys() & {"hour", "minute"}:
+            return
+        self._coordinator._sensors[self._sensor_key] = preconditioning_program_time(self.program)
