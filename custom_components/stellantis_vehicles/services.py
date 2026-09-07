@@ -7,6 +7,7 @@ from homeassistant.const import ATTR_DEVICE_ID
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 
+from .base import StellantisVehicleCoordinator
 from .utils import preconditioning_days_from_string
 
 from .const import (
@@ -31,11 +32,12 @@ SET_PRECONDITIONING_PROGRAM_SCHEMA = vol.Schema({
 })
 
 
-def get_coordinator_for_device(hass: HomeAssistant, device):
+def get_coordinator_for_device(
+    hass:HomeAssistant, device:dr.DeviceEntry | None
+) -> StellantisVehicleCoordinator | None:
     """ Get the coordinator of the Stellantis vehicle behind a device entry. """
     if not device:
         return None
-    domain_data = hass.data.get(DOMAIN, {})
     for identifier in device.identifiers:
         # A device can carry identifiers from other integrations too, and some of
         # those are not the plain (domain, id) pair, so index instead of unpack.
@@ -43,16 +45,23 @@ def get_coordinator_for_device(hass: HomeAssistant, device):
             continue
         vin = identifier[1]
         for entry_id in device.config_entries:
-            stellantis = domain_data.get(entry_id)
+            entry = hass.config_entries.async_get_entry(entry_id)
+            if entry is None or entry.domain != DOMAIN:
+                continue
+            # The StellantisVehicles instance is stored on ConfigEntry.runtime_data
+            # and is None while the entry is unloaded or failed to set up.
+            stellantis = entry.runtime_data
             if stellantis and (coordinator := stellantis.async_get_coordinator_by_vin(vin)):
                 return coordinator
     return None
 
 
-def get_coordinators(hass: HomeAssistant, device_ids):
+def get_coordinators(
+    hass:HomeAssistant, device_ids:list[str]
+) -> list[StellantisVehicleCoordinator]:
     """ Get the coordinators of the vehicles targeted by a service call. """
     registry = dr.async_get(hass)
-    coordinators = []
+    coordinators:list[StellantisVehicleCoordinator] = []
     for device_id in device_ids:
         coordinator = get_coordinator_for_device(hass, registry.async_get(device_id))
         if not coordinator:
