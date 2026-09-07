@@ -2,7 +2,7 @@
 
 This directory is a **separate git repository**, checked in as a submodule of `home-assistant-core`. It is a standalone HACS custom integration (`custom_components/stellantis_vehicles/`), not part of `homeassistant/components`. Run every `git` command from inside this directory, not from the core repo root, or it targets the wrong repository.
 
-**This `CLAUDE.md` may only live on `local/changes` and `testing`.** It must never reach `develop` or any upstream-destined staging/PR branch — not via a direct commit, a merge, or a cherry-pick. Unstage it when preparing such a branch.
+**This `CLAUDE.md` lives only on `local/changes`.** It must never reach `testing`, `develop`, or any upstream-destined staging/PR branch — not via a direct commit, a merge, or a cherry-pick. `local/changes` merges into `testing`, so that merge is the one that would carry it: drop it there as part of the merge (`git rm CLAUDE.md`), exactly as with `PR-Info.md`. Unstage it when preparing any other branch.
 
 **Never push without being asked.** No `git push` — and no `--force` / `--force-with-lease` — unless the user explicitly requests it in that turn. Reordering, squashing, or otherwise rewriting history locally is fine; publishing it is the user's call.
 
@@ -39,7 +39,7 @@ Don't hard-wrap Markdown prose — one paragraph or list item per line, relying 
 | Branch | Purpose |
 |---|---|
 | `testing` | Primary branch — new contributions are tried here first. Never a base for new branches. |
-| `local/changes` | Changes the user does **not** want upstream. Synced to `origin` only, never `upstream`. Merges into `testing`. |
+| `local/changes` | Changes the user does **not** want upstream. Synced to `origin` only, never `upstream`. Merges into `testing`, except this `CLAUDE.md`, which is dropped from every such merge. |
 | `develop` | Tracks `upstream/develop`. The base for upstream-PR branches. |
 | `master` | Tracks releases. |
 
@@ -47,6 +47,7 @@ Don't hard-wrap Markdown prose — one paragraph or list item per line, relying 
 - **Don't merge branches into `testing` or `develop` unless asked.**
 - **Upstream-PR branches**: branch off `upstream/develop`, not `testing` — `testing`-only commits would ride along and pollute the PR diff. When work on `testing` is ready it gets consolidated onto its own prefixed branch, which is then used to open the PR. Ask if the correct base is unclear.
 - **`PR-Info.md`**: a per-branch "remove before opening PR" scratch note. Must never land on `testing` — when a merge brings it along, `git rm PR-Info.md` as part of that merge or in a follow-up commit. Leave it untouched on the branch it came from. Don't use em-dashes (—) in its prose; use a comma, colon, semicolon, or parentheses instead.
+- **`CLAUDE.md`** (this file): local guidance that is kept only on `local/changes`. Like `PR-Info.md` it must never land on `testing` — when merging `local/changes` into `testing`, `git rm CLAUDE.md` as part of that merge (or in an immediate follow-up commit). Never commit or cherry-pick it onto `testing`, `develop`, or any upstream-PR branch.
 - **`README.md` / `info.md`** are kept in sync (`render_readme: true` in `hacs.json`); an `update_readme.yaml` workflow may regenerate parts of `README.md`. Don't hand-edit generated sections without checking that workflow first.
 
 ## Branch naming
