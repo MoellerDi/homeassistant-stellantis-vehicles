@@ -118,7 +118,11 @@ async def async_remove_config_entry_device(
     unpaired. A device for a vehicle still returned by the account cannot be
     deleted - it would just be recreated on the next refresh.
     """
-    stellantis = config.runtime_data
+    # This callback can fire while the entry is not loaded (disabled, failed
+    # setup, or already unloaded). Home Assistant deletes runtime_data after a
+    # successful unload and never sets it before setup, so read it defensively:
+    # a missing or None value means "not loaded", and there is nothing to block.
+    stellantis = getattr(config, "runtime_data", None)
     if stellantis is None:
         return True
     try:
