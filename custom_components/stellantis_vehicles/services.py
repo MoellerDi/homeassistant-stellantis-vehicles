@@ -48,9 +48,11 @@ def get_coordinator_for_device(
             entry = hass.config_entries.async_get_entry(entry_id)
             if entry is None or entry.domain != DOMAIN:
                 continue
-            # The StellantisVehicles instance is stored on ConfigEntry.runtime_data
-            # and is None while the entry is unloaded or failed to set up.
-            stellantis = entry.runtime_data
+            # The StellantisVehicles instance is stored on ConfigEntry.runtime_data.
+            # Home Assistant deletes that attribute after a successful unload and
+            # never sets it before setup, so read it defensively: a missing or
+            # falsy value just means this entry has no usable coordinator here.
+            stellantis = getattr(entry, "runtime_data", None)
             if stellantis and (coordinator := stellantis.async_get_coordinator_by_vin(vin)):
                 return coordinator
     return None
