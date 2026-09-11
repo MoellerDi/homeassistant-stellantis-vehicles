@@ -66,7 +66,8 @@ from .const import (
     ABRP_URL,
     ABRP_API_KEY,
     TRANSLATION_PLACEHOLDERS,
-    CAR_API_GET_VEHICLE_MAINTENANCE_URL
+    CAR_API_GET_VEHICLE_MAINTENANCE_URL,
+    FDS_FEATURE_CODES
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -103,6 +104,18 @@ def _parse_mqtt_timer(program):
         # Weekday mask, Stellantis order (index 0 = Monday).
         timer["days"] = program.get("day")
     return timer
+
+
+def _parse_mqtt_features(codes):
+    """Map raw "fds" feature codes to named capability flags.
+
+    A code being present means the vehicle reports that capability as
+    enabled. Codes not found in FDS_FEATURE_CODES are kept under their raw
+    code so nothing is silently dropped while the mapping is filled in.
+    """
+    if not codes:
+        return {}
+    return {FDS_FEATURE_CODES.get(code, code): True for code in codes}
 
 
 def parse_mqtt_event(payload):
@@ -165,8 +178,9 @@ def parse_mqtt_event(payload):
             "applicable": payload.get("privacy_applicable"),
             "applicable_max": payload.get("privacy_applicable_max"),
         },
-        # Supported remote-service feature codes reported by the vehicle.
-        "features": payload.get("fds"),
+        # Supported remote-service feature codes reported by the vehicle,
+        # mapped to named flags (see FDS_FEATURE_CODES).
+        "features": _parse_mqtt_features(payload.get("fds")),
     }
 
 
