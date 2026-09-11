@@ -1020,8 +1020,15 @@ class StellantisVehicles(StellantisOauth):
             elif msg.topic.startswith(MQTT_EVENT_TOPIC):
                 event = parse_mqtt_event(data)
                 _LOGGER.debug("Parsed vehicle event: %s", json.dumps(event, default=str))
-                # TODO: feed `event` into the matching coordinator to update
-                # entity state without polling.
+                coordinator = self.async_get_coordinator_by_vin(event.get("vin"))
+                if coordinator:
+                    # wait=False: fire-and-forget so the paho network thread
+                    # isn't blocked; apply_mqtt_features notifies listeners itself.
+                    self.do_async(coordinator.apply_mqtt_features(event.get("features")), wait=False)
+                else:
+                    _LOGGER.debug("No coordinator found for vehicle event (vin %s)", event.get("vin"))
+                # TODO: feed the rest of `event` (charging/preconditioning/doors/...)
+                # into the coordinator to update entity state without polling.
         except Exception:
             _LOGGER.exception("Error while handling MQTT message")
 
