@@ -3,7 +3,7 @@ import aiohttp
 import base64
 from PIL import Image, ImageOps
 import os
-from urllib.request import urlopen
+from io import BytesIO
 from copy import deepcopy
 import paho.mqtt.client as mqtt
 import json
@@ -20,6 +20,7 @@ from homeassistant.helpers import translation
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.components import persistent_notification
 from homeassistant.helpers.event import async_track_point_in_time
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util.ssl import client_context
 # If the Stellantis MQTT broker ever presents a certificate that fails
 # validation, import client_context_no_verify here as well and use it in
@@ -313,7 +314,7 @@ class StellantisBase:
         return self.replace_placeholders(f"{url}?{query_params}", vehicle)
 
     @log_call
-    async def make_http_request(self, url, method='GET', headers=None, params=None, json_data=None, data=None, timeout=60):
+    async def make_http_request(self, url, method='GET', headers=None, params=None, json_data=None, data=None, timeout=60, _retried=False):
         """Perform an HTTP request and return the decoded JSON response."""
         self.start_session()
         try:
@@ -339,28 +340,44 @@ class StellantisBase:
 
                     if str(resp.status) == "404" and str(result.get("code")) == "40400":
                         # Not Found: We didn't find the status for this vehicle. - 40400
-                        _LOGGER.warning(error)
+                        _LOGGER.warning(error or "Vehicle status not found (HTTP 404)")
                         return {}
                     if str(resp.status).startswith("500") and str(result.get("code")) == "50038":
                         # CVS error/user-vins - 50038: a transient Stellantis backend
                         # failure while resolving the account's VIN list. Treat it like
                         # an empty status so the coordinator keeps the last known data
                         # for a few cycles instead of dropping every entity.
-                        _LOGGER.warning(error)
+                        _LOGGER.warning(error or "Transient CVS user-vins error (HTTP 500)")
                         return {}
                     if str(resp.status) == "500" and str(result.get("code")) == "50000":
                         # Connection module replaced (https://github.com/andreadegiovine/homeassistant-stellantis-vehicles/issues/388)
                         # https://github.com/andreadegiovine/homeassistant-stellantis-vehicles/pull/475
-                        raise CommunicationError(error)
+                        raise CommunicationError(error or "Stellantis connection module error (HTTP 500)")
                     if str(resp.status) == "400" and result.get("error") == "invalid_grant":
                         # Token expiration
-                        raise ConfigEntryAuthFailed(error)
+                        raise ConfigEntryAuthFailed(error or "Stellantis rejected the request (invalid_grant)")
                     if str(resp.status) == "401":
-                        # Oauth token seem expired, refresh request blocked by server/connection error
-                        raise CommunicationError(error)
+                        # The OAuth access token was rejected. This is usually a
+                        # short-lived blip right after a token rotation, so
+                        # refresh the token once and retry the same request
+                        # before surfacing an error.
+                        if not _retried and OAUTH_TOKEN_URL not in url:
+                            _LOGGER.debug("401 received, refreshing the OAuth token and retrying once")
+                            try:
+                                await self.refresh_oauth_token_request()
+                            except (CommunicationError, RateLimitException) as refresh_err:
+                                # ConfigEntryAuthFailed (dead refresh token) is left
+                                # to propagate so Home Assistant starts reauth.
+                                _LOGGER.debug("Token refresh before retry failed: %s", refresh_err)
+                            else:
+                                new_token = (self.get_config("oauth") or {}).get("access_token")
+                                if headers and "Authorization" in headers and new_token:
+                                    headers = {**headers, "Authorization": f"Bearer {new_token}"}
+                                return await self.make_http_request(url, method, headers, params, json_data, data, timeout, _retried=True)
+                        raise CommunicationError("Stellantis rejected the access token (HTTP 401)")
                     if str(resp.status).startswith("50"):
                         # Internal error
-                        raise CommunicationError(error)
+                        raise CommunicationError(error or f"Stellantis internal server error (HTTP {resp.status})")
                     # Any other non-2xx response we don't have a specific case for
                     raise CommunicationError(error or f"Unexpected HTTP status {resp.status}")
 
@@ -571,7 +588,6 @@ class StellantisVehicles(StellantisOauth):
             new_data[config] = None
         new_data[config] = value
         self._hass.config_entries.async_update_entry(self._entry, data=new_data)
-        self._hass.config_entries._async_schedule_save()
 
     def get_stored_config(self, config):
         if config in self._entry.data:
@@ -668,10 +684,17 @@ class StellantisVehicles(StellantisOauth):
         image_url = image_path.replace(public_path, "/local")
         if os.path.isfile(image_path):
             return image_url
-        image = await self._hass.async_add_executor_job(urlopen, url)
-        with Image.open(image) as im:
-            im = ImageOps.pad(im, (400, 400))
-        await self._hass.async_add_executor_job(im.save, image_path)
+        session = async_get_clientsession(self._hass)
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+            resp.raise_for_status()
+            image_data = await resp.read()
+
+        def _resize_and_save() -> None:
+            with Image.open(BytesIO(image_data)) as im:
+                im = ImageOps.pad(im, (400, 400))
+                im.save(image_path)
+
+        await self._hass.async_add_executor_job(_resize_and_save)
         return image_url
 
     def reset_scheduled_tokens(self):
