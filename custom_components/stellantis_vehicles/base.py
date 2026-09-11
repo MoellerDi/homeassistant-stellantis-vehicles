@@ -51,6 +51,7 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         self._stellantis = stellantis
         self._data = {}
         self._sensors = {}
+        self._features = {}
         self._commands_history = {}
         self._disabled_commands = []
         self._last_trip = None
@@ -205,6 +206,26 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
     def vehicle_type(self):
         """ Vehicle type. """
         return self._vehicle["type"]
+
+    @property
+    def features(self):
+        """ Remote-service feature flags last reported by the vehicle (see FDS_FEATURE_CODES). """
+        return self._features
+
+    def supports_feature(self, name):
+        """ Whether the vehicle currently reports the named remote-service feature as enabled. """
+        return bool(self._features.get(name))
+
+    async def apply_mqtt_features(self, features):
+        """ Merge supported-feature flags pushed via an MQTT vehicle event.
+
+        Features are merged rather than replaced: a single event only carries
+        the flags Stellantis chose to (re-)send, not the full known set.
+        """
+        if not features:
+            return
+        self._features.update(features)
+        self.async_update_listeners()
 
     @property
     def command_history(self):
