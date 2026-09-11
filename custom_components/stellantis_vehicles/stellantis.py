@@ -584,6 +584,7 @@ class StellantisVehicles(StellantisOauth):
         self._fake_vehicle_added = False
         self._mqtt = None
         self._mqtt_last_request = None
+        self._mqtt_subscribe_to_event_topic = True
 
         self._oauth_token_scheduled = None
         self._mqtt_token_scheduled = None
@@ -1031,8 +1032,9 @@ class StellantisVehicles(StellantisOauth):
         _LOGGER.debug("MQTT connected (code %s)", result_code)
         try:
             topics = [MQTT_RESP_TOPIC + self.get_config("customer_id") + "/#"]
-            for vehicle in self._vehicles:
-                topics.append(MQTT_EVENT_TOPIC + vehicle["vin"])
+            if self._mqtt_subscribe_to_event_topic:
+                for vehicle in self._vehicles:
+                    topics.append(MQTT_EVENT_TOPIC + vehicle["vin"])
             for topic in topics:
                 client.subscribe(topic, qos=MQTT_QOS)
                 _LOGGER.debug("Subscribed to MQTT topic %s", topic)
@@ -1042,6 +1044,13 @@ class StellantisVehicles(StellantisOauth):
     @log_call
     def _on_mqtt_disconnect(self, client, userdata, result_code):
         _LOGGER.debug("MQTT disconnected (code %s: %s)", result_code, mqtt.error_string(result_code))
+        if result_code == 5:
+            # MQTT_ERR_CONN_REFUSED: confirmed from logs to occur when the
+            # broker closes the whole connection instead of a per-topic
+            # SUBACK 0x80 because the account isn't entitled to the event
+            # topic. Stop requesting it so the connection can stay up.
+            _LOGGER.warning("MQTT connection refused, will try without subscribing to the event topic")
+            self._mqtt_subscribe_to_event_topic = False
         if result_code == 11: # MQTT_ERR_AUTH
             # Runs on the paho network thread; wait=False keeps the reconnect loop
             # from blocking on the token refresh (network I/O, no timeout).
