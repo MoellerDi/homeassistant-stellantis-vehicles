@@ -342,6 +342,30 @@
       },
       "preconditioning_stop": {
         "name": "Preconditioning stop"
+      },
+      "preconditioning_p1_send": {
+        "name": "Preconditioning P1 send"
+      },
+      "preconditioning_p2_send": {
+        "name": "Preconditioning P2 send"
+      },
+      "preconditioning_p3_send": {
+        "name": "Preconditioning P3 send"
+      },
+      "preconditioning_p4_send": {
+        "name": "Preconditioning P4 send"
+      },
+      "preconditioning_p1_reset": {
+        "name": "Preconditioning P1 reset"
+      },
+      "preconditioning_p2_reset": {
+        "name": "Preconditioning P2 reset"
+      },
+      "preconditioning_p3_reset": {
+        "name": "Preconditioning P3 reset"
+      },
+      "preconditioning_p4_reset": {
+        "name": "Preconditioning P4 reset"
       }
     },
     "device_tracker": {
@@ -383,17 +407,73 @@
       },
       "battery_values_correction": {
         "name": "Battery values correction"
+      },
+      "preconditioning_p1_enabled": {
+        "name": "Preconditioning P1"
+      },
+      "preconditioning_p2_enabled": {
+        "name": "Preconditioning P2"
+      },
+      "preconditioning_p3_enabled": {
+        "name": "Preconditioning P3"
+      },
+      "preconditioning_p4_enabled": {
+        "name": "Preconditioning P4"
       }
     },
     "text": {
       "abrp_token": {
         "name": "ABRP token"
+      },
+      "preconditioning_p1_days": {
+        "name": "Preconditioning P1 days"
+      },
+      "preconditioning_p2_days": {
+        "name": "Preconditioning P2 days"
+      },
+      "preconditioning_p3_days": {
+        "name": "Preconditioning P3 days"
+      },
+      "preconditioning_p4_days": {
+        "name": "Preconditioning P4 days"
       }
     },
     "time": {
       "battery_charging_start": {
         "name": "Battery charging start"
+      },
+      "preconditioning_p1_time": {
+        "name": "Preconditioning P1 time"
+      },
+      "preconditioning_p2_time": {
+        "name": "Preconditioning P2 time"
+      },
+      "preconditioning_p3_time": {
+        "name": "Preconditioning P3 time"
+      },
+      "preconditioning_p4_time": {
+        "name": "Preconditioning P4 time"
       }
+    }
+  },
+  "exceptions": {
+    "preconditioning_program_running": {
+      "message": "Preconditioning is running. Stop it before changing a preconditioning program, the vehicle would receive the change as a stop request."
+    },
+    "preconditioning_program_time_missing": {
+      "message": "Set the program time before enabling this preconditioning program."
+    },
+    "preconditioning_program_days_missing": {
+      "message": "Select at least one day before enabling this preconditioning program."
+    },
+    "preconditioning_program_invalid_day": {
+      "message": "\"{day}\" is not a valid day, use one of: {days}."
+    },
+    "preconditioning_program_no_changes": {
+      "message": "Set at least one of days, time or enabled to change a preconditioning program."
+    },
+    "device_not_found": {
+      "message": "Device {device_id} is not a Stellantis vehicle of a loaded config entry."
     }
   },
   "common": {

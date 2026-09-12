@@ -342,6 +342,30 @@
       },
       "preconditioning_stop": {
         "name": "Arrêter pré-conditionnement"
+      },
+      "preconditioning_p1_send": {
+        "name": "Envoyer préconditionnement P1"
+      },
+      "preconditioning_p2_send": {
+        "name": "Envoyer préconditionnement P2"
+      },
+      "preconditioning_p3_send": {
+        "name": "Envoyer préconditionnement P3"
+      },
+      "preconditioning_p4_send": {
+        "name": "Envoyer préconditionnement P4"
+      },
+      "preconditioning_p1_reset": {
+        "name": "Réinitialiser préconditionnement P1"
+      },
+      "preconditioning_p2_reset": {
+        "name": "Réinitialiser préconditionnement P2"
+      },
+      "preconditioning_p3_reset": {
+        "name": "Réinitialiser préconditionnement P3"
+      },
+      "preconditioning_p4_reset": {
+        "name": "Réinitialiser préconditionnement P4"
       }
     },
     "device_tracker": {
@@ -383,17 +407,73 @@
       },
       "battery_values_correction": {
         "name": "Correction des valeurs de la batterie"
+      },
+      "preconditioning_p1_enabled": {
+        "name": "Préconditionnement P1"
+      },
+      "preconditioning_p2_enabled": {
+        "name": "Préconditionnement P2"
+      },
+      "preconditioning_p3_enabled": {
+        "name": "Préconditionnement P3"
+      },
+      "preconditioning_p4_enabled": {
+        "name": "Préconditionnement P4"
       }
     },
     "text": {
       "abrp_token": {
         "name": "Jeton ABRP"
+      },
+      "preconditioning_p1_days": {
+        "name": "Préconditionnement P1 jours"
+      },
+      "preconditioning_p2_days": {
+        "name": "Préconditionnement P2 jours"
+      },
+      "preconditioning_p3_days": {
+        "name": "Préconditionnement P3 jours"
+      },
+      "preconditioning_p4_days": {
+        "name": "Préconditionnement P4 jours"
       }
     },
     "time": {
       "battery_charging_start": {
         "name": "Début recharge batterie"
+      },
+      "preconditioning_p1_time": {
+        "name": "Préconditionnement P1 heure"
+      },
+      "preconditioning_p2_time": {
+        "name": "Préconditionnement P2 heure"
+      },
+      "preconditioning_p3_time": {
+        "name": "Préconditionnement P3 heure"
+      },
+      "preconditioning_p4_time": {
+        "name": "Préconditionnement P4 heure"
       }
+    }
+  },
+  "exceptions": {
+    "preconditioning_program_running": {
+      "message": "Le préconditionnement est en cours. Arrêtez-le avant de modifier un programme de préconditionnement, sinon le véhicule interprétera la modification comme une demande d'arrêt."
+    },
+    "preconditioning_program_time_missing": {
+      "message": "Définissez l'heure du programme avant d'activer ce programme de préconditionnement."
+    },
+    "preconditioning_program_days_missing": {
+      "message": "Sélectionnez au moins un jour avant d'activer ce programme de préconditionnement."
+    },
+    "preconditioning_program_invalid_day": {
+      "message": "« {day} » n'est pas un jour valide, utilisez l'une des valeurs suivantes : {days}."
+    },
+    "preconditioning_program_no_changes": {
+      "message": "Définissez au moins l'un des champs jours, heure ou activé pour modifier un programme de préconditionnement."
+    },
+    "device_not_found": {
+      "message": "L'appareil {device_id} n'est pas un véhicule Stellantis d'une entrée de configuration chargée."
     }
   },
   "common": {
