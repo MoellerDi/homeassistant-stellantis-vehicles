@@ -69,7 +69,8 @@ from .const import (
     ABRP_API_KEY,
     TRANSLATION_PLACEHOLDERS,
     CAR_API_GET_VEHICLE_MAINTENANCE_URL,
-    MQTT_TOKEN_RETRY_BACKOFF
+    MQTT_TOKEN_RETRY_BACKOFF,
+    FDS_FEATURE_CODES
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -85,6 +86,106 @@ def _log_http_exchange(url, headers, response, **extra):
         "HTTP exchange | url=%s headers=%s%s | response=%s",
         url, headers, details, response,
     )
+
+
+# Stellantis uses hour 34 (and similar out-of-range values) as an "unset" marker
+# for timer slots that were never configured.
+def _parse_mqtt_timer(program):
+    """Normalize a single precond/charge timer program, or None if unset."""
+    if not program:
+        return None
+    hour = program.get("hour")
+    minute = program.get("minute")
+    if hour is None or not 0 <= hour <= 23:
+        return None
+    timer = {
+        "hour": hour,
+        "minute": minute if minute is not None else 0,
+    }
+    if "on" in program:
+        timer["enabled"] = bool(program.get("on"))
+    if "day" in program:
+        # Weekday mask, Stellantis order (index 0 = Monday).
+        timer["days"] = program.get("day")
+    return timer
+
+
+def _parse_mqtt_features(codes):
+    """Map raw "fds" feature codes to named capability flags.
+
+    A code being present means the vehicle reports that capability as
+    enabled. Codes not found in FDS_FEATURE_CODES are kept under their raw
+    code so nothing is silently dropped while the mapping is filled in.
+    """
+    if not codes:
+        return {}
+    return {FDS_FEATURE_CODES.get(code, code): True for code in codes}
+
+
+def parse_mqtt_event(payload):
+    """Normalize a Stellantis RemoteServices vehicle event (MQTT_EVENT_TOPIC).
+
+    Turns the raw push payload into a stable, self-describing structure that a
+    coordinator can later consume to update entity state without polling.
+    Missing sections yield None values instead of raising, so downstream code
+    can always rely on the shape. Raw enum codes whose meaning is not yet
+    confirmed are passed through unchanged with a ``_code`` suffix.
+    """
+    charging = payload.get("charging_state") or {}
+    precond = payload.get("precond_state") or {}
+    doors = payload.get("doors_state") or {}
+    opening_state = doors.get("doors_opening_state") or []
+
+    return {
+        "vin": payload.get("vin"),
+        "timestamp": payload.get("date"),
+        # Increasing counter + trigger code for the event stream itself.
+        "event_counter": payload.get("obj_counter"),
+        "event_reason_code": payload.get("reason"),
+        "signal_quality": payload.get("signal_quality"),
+        "electric_network_state_code": payload.get("etat_res_elec"),
+        "battery": {
+            "level": charging.get("soc_batt"),
+            "autonomy_km": charging.get("autonomy_zev"),
+        },
+        "charging": {
+            "available": bool(charging.get("available")),
+            "cable_detected": bool(charging.get("cable_detected")),
+            "rate": charging.get("rate"),
+            "remaining_time_min": charging.get("remaining_time"),
+            "mode_code": charging.get("mode"),
+            "type_code": charging.get("type"),
+            "hmi_state_code": charging.get("hmi_state"),
+            "scheduled_time": _parse_mqtt_timer(charging.get("program")),
+        },
+        "preconditioning": {
+            "available": bool(precond.get("available")),
+            "asap": bool(precond.get("asap")),
+            "status_code": precond.get("status"),
+            "programs": {
+                name: _parse_mqtt_timer(program)
+                for name, program in (precond.get("programs") or {}).items()
+            },
+        },
+        "doors": {
+            "locked": doors.get("doors_locking_state") == 1,
+            "opening_state": opening_state,
+            "any_open": any(opening_state),
+        },
+        "security": {
+            "stolen": bool(payload.get("stolen_state")),
+            "sev_active": bool(payload.get("sev_state")),
+            "sev_stop_date": payload.get("sev_stop_date"),
+        },
+        "privacy": {
+            "customer": payload.get("privacy_customer"),
+            "applicable": payload.get("privacy_applicable"),
+            "applicable_max": payload.get("privacy_applicable_max"),
+        },
+        # Supported remote-service feature codes reported by the vehicle,
+        # mapped to named flags (see FDS_FEATURE_CODES).
+        "features": _parse_mqtt_features(payload.get("fds")),
+    }
 
 
 # Some Stellantis MQTT servers drop packets with a TCP payload greater than 1456 bytes
@@ -981,11 +1082,17 @@ class StellantisVehicles(StellantisOauth):
                     _LOGGER.error("No result code")
 
             elif msg.topic.startswith(MQTT_EVENT_TOPIC):
-#                 charge_info = data["charging_state"]
-#                 programs = data["precond_state"].get("programs", None)
-#                 if programs:
-#                     self.precond_programs[data["vin"]] = data["precond_state"]["programs"]
-                _LOGGER.debug("Update data from mqtt?!?")
+                event = parse_mqtt_event(data)
+                _LOGGER.debug("Parsed vehicle event: %s", json.dumps(event, default=str))
+                coordinator = self.async_get_coordinator_by_vin(event.get("vin"))
+                if coordinator:
+                    # wait=False: fire-and-forget so the paho network thread
+                    # isn't blocked; apply_mqtt_features notifies listeners itself.
+                    self.do_async(coordinator.apply_mqtt_features(event.get("features")), wait=False)
+                else:
+                    _LOGGER.debug("No coordinator found for vehicle event (vin %s)", event.get("vin"))
+                # TODO: feed the rest of `event` (charging/preconditioning/doors/...)
+                # into the coordinator to update entity state without polling.
         except Exception:
             _LOGGER.exception("Error while handling MQTT message")
 
