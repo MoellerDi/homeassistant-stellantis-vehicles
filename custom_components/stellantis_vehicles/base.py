@@ -288,13 +288,18 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         """ Preconditioning running state. """
         return self.preconditioning_data.get("status") == "Enabled"
 
-    @property
-    def pending_action(self):
-        """ Pending action. """
-        if not self._commands_history:
-            return False
-        last_action_id = list(self._commands_history.keys())[-1]
-        return not self._commands_history[last_action_id]["updates"]
+    def pending_action(self, name: str) -> bool:
+        """ True while a command sent for `name` has no MQTT update yet.
+
+        Scoped to `name` (matched the same way as `_disabled_commands`) so that
+        sending one command does not gate the availability of every other
+        button while its own MQTT response is in flight.
+        """
+        return any(
+            not entry["updates"]
+            for entry in self._commands_history.values()
+            if entry["name"] == name
+        )
 
     def _prune_command_history(self):
         """ Drop the oldest command-history entries beyond COMMAND_HISTORY_LIMIT.
@@ -808,7 +813,7 @@ class StellantisBaseEntity(CoordinatorEntity):
         """ Base availability property for mqtt commands. """
         mqtt_is_connected = self._stellantis and self._stellantis._mqtt and self._stellantis._mqtt.is_connected()
         command_is_enabled = self.name not in self._coordinator._disabled_commands
-        return mqtt_is_connected and command_is_enabled and not self._coordinator.pending_action
+        return mqtt_is_connected and command_is_enabled and not self._coordinator.pending_action(self.name)
 
     @callback
     def _handle_coordinator_update(self):
