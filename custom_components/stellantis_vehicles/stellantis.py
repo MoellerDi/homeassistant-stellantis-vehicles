@@ -823,20 +823,6 @@ class StellantisVehicles(StellantisOauth):
         self.save_config({"mqtt": mqtt_config})
         self.update_stored_config("mqtt", mqtt_config)
 
-    async def _disconnect_mqtt_locked(self) -> None:
-        """Tear down the current MQTT client and join its network thread.
-
-        Caller must hold self._mqtt_lock. No-op if there is no client.
-        """
-        if self._mqtt is None:
-            return
-        mqtt_client, self._mqtt = self._mqtt, None
-        # Drop the callback so this deliberate disconnect does not trigger a
-        # fresh reconnect / token-refresh attempt.
-        mqtt_client.on_disconnect = None
-        mqtt_client.disconnect()
-        await self._hass.async_add_executor_job(mqtt_client.loop_stop)
-
     @log_call
     async def connect_mqtt(self):
         """Connect the MQTT client, reusing an already-connected one if possible."""
@@ -890,6 +876,20 @@ class StellantisVehicles(StellantisOauth):
             except Exception as e:
                 _LOGGER.warning("Failed to connect to the MQTT broker: %s", e)
             return self._mqtt.is_connected()
+
+    async def _disconnect_mqtt_locked(self) -> None:
+        """Tear down the current MQTT client and join its network thread.
+
+        Caller must hold self._mqtt_lock. No-op if there is no client.
+        """
+        if self._mqtt is None:
+            return
+        mqtt_client, self._mqtt = self._mqtt, None
+        # Drop the callback so this deliberate disconnect does not trigger a
+        # fresh reconnect / token-refresh attempt.
+        mqtt_client.on_disconnect = None
+        mqtt_client.disconnect()
+        await self._hass.async_add_executor_job(mqtt_client.loop_stop)
 
     @log_call
     def _on_mqtt_connect(self, client, userdata, result_code, _):
