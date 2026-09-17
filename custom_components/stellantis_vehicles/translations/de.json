@@ -341,6 +341,30 @@
       },
       "preconditioning_stop": {
         "name": "Vorklimatisierung stoppen"
+      },
+      "preconditioning_p1_send": {
+        "name": "Vorklimatisierung P1 senden"
+      },
+      "preconditioning_p2_send": {
+        "name": "Vorklimatisierung P2 senden"
+      },
+      "preconditioning_p3_send": {
+        "name": "Vorklimatisierung P3 senden"
+      },
+      "preconditioning_p4_send": {
+        "name": "Vorklimatisierung P4 senden"
+      },
+      "preconditioning_p1_reset": {
+        "name": "Vorklimatisierung P1 zurücksetzen"
+      },
+      "preconditioning_p2_reset": {
+        "name": "Vorklimatisierung P2 zurücksetzen"
+      },
+      "preconditioning_p3_reset": {
+        "name": "Vorklimatisierung P3 zurücksetzen"
+      },
+      "preconditioning_p4_reset": {
+        "name": "Vorklimatisierung P4 zurücksetzen"
       }
     },
     "device_tracker": {
@@ -382,17 +406,73 @@
       },
       "battery_values_correction": {
         "name": "Korrektur der Batteriewerte"
+      },
+      "preconditioning_p1_enabled": {
+        "name": "Vorklimatisierung P1"
+      },
+      "preconditioning_p2_enabled": {
+        "name": "Vorklimatisierung P2"
+      },
+      "preconditioning_p3_enabled": {
+        "name": "Vorklimatisierung P3"
+      },
+      "preconditioning_p4_enabled": {
+        "name": "Vorklimatisierung P4"
       }
     },
     "text": {
       "abrp_token": {
         "name": "ABRP Token"
+      },
+      "preconditioning_p1_days": {
+        "name": "Vorklimatisierung P1 Tage"
+      },
+      "preconditioning_p2_days": {
+        "name": "Vorklimatisierung P2 Tage"
+      },
+      "preconditioning_p3_days": {
+        "name": "Vorklimatisierung P3 Tage"
+      },
+      "preconditioning_p4_days": {
+        "name": "Vorklimatisierung P4 Tage"
       }
     },
     "time": {
       "battery_charging_start": {
         "name": "Start des Batterieladevorgangs"
+      },
+      "preconditioning_p1_time": {
+        "name": "Vorklimatisierung P1 Zeit"
+      },
+      "preconditioning_p2_time": {
+        "name": "Vorklimatisierung P2 Zeit"
+      },
+      "preconditioning_p3_time": {
+        "name": "Vorklimatisierung P3 Zeit"
+      },
+      "preconditioning_p4_time": {
+        "name": "Vorklimatisierung P4 Zeit"
       }
+    }
+  },
+  "exceptions": {
+    "preconditioning_program_running": {
+      "message": "Die Vorklimatisierung läuft gerade. Beenden Sie sie, bevor Sie ein Vorklimatisierungsprogramm ändern, sonst wertet das Fahrzeug die Änderung als Stopp-Anforderung."
+    },
+    "preconditioning_program_time_missing": {
+      "message": "Legen Sie die Programmzeit fest, bevor Sie dieses Vorklimatisierungsprogramm aktivieren."
+    },
+    "preconditioning_program_days_missing": {
+      "message": "Wählen Sie mindestens einen Tag aus, bevor Sie dieses Vorklimatisierungsprogramm aktivieren."
+    },
+    "preconditioning_program_invalid_day": {
+      "message": "„{day}“ ist kein gültiger Tag, verwenden Sie einen von: {days}."
+    },
+    "preconditioning_program_no_changes": {
+      "message": "Legen Sie mindestens eines der Felder Tage, Zeit oder Aktiviert fest, um ein Vorklimatisierungsprogramm zu ändern."
+    },
+    "device_not_found": {
+      "message": "Das Gerät {device_id} ist kein Stellantis-Fahrzeug eines geladenen Konfigurationseintrags."
     }
   },
   "common": {
