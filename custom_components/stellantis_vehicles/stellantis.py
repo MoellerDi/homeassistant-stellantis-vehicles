@@ -838,11 +838,20 @@ class StellantisVehicles(StellantisOauth):
         await self._hass.async_add_executor_job(mqtt_client.loop_stop)
 
     @log_call
-    async def connect_mqtt(self, force: bool = False):
-        # Serialize against concurrent connect_mqtt() calls (e.g. several vehicle
-        # coordinators noticing a dropped connection at once) and against
-        # async_shutdown(), so nobody operates on a client another task just
-        # tore down or replaced.
+    async def connect_mqtt(self):
+        """Connect the MQTT client, reusing an already-connected one if possible."""
+        return await self._connect_mqtt(force=False)
+
+    @log_call
+    async def reconnect_mqtt(self):
+        """Force a full MQTT reconnect, even if the client currently looks connected."""
+        return await self._connect_mqtt(force=True)
+
+    async def _connect_mqtt(self, force: bool):
+        # Serialize against concurrent connect_mqtt()/reconnect_mqtt() calls
+        # (e.g. several vehicle coordinators noticing a dropped connection at
+        # once) and against async_shutdown(), so nobody operates on a client
+        # another task just tore down or replaced.
         async with self._mqtt_lock:
             if self._shutting_down:
                 # A coordinator refresh still in flight during unload must not
@@ -911,11 +920,11 @@ class StellantisVehicles(StellantisOauth):
                 _LOGGER.warning("Subscription failed, will try to reconnect MQTT in 300 seconds")
                 # wait=False: this callback runs on the paho-mqtt network thread, so
                 # blocking it for 300s here would stall the loop (pings, reconnects,
-                # other callbacks). force=True: the transport can still look
+                # other callbacks). reconnect_mqtt(): the transport can still look
                 # connected even though the broker refused this subscription, so
                 # connect_mqtt()'s "already connected, nothing to do" shortcut
                 # must not apply here.
-                self.do_async(self.connect_mqtt(force=True), 300, wait=False)
+                self.do_async(self.reconnect_mqtt(), 300, wait=False)
             else:
                 _LOGGER.debug("MQTT subscription completed (QoS: %s)", granted_qos)
         except Exception:
