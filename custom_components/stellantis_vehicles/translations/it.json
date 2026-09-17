@@ -483,6 +483,9 @@
     },
     "device_not_found": {
       "message": "Il dispositivo {device_id} non è un veicolo Stellantis di una voce di configurazione caricata."
+    },
+    "command_already_pending": {
+      "message": "\"{name}\" è già stato inviato ed è ancora in attesa di una risposta dal veicolo."
     }
   },
   "common": {

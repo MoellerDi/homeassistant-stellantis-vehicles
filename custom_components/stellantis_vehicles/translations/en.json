@@ -483,6 +483,9 @@
     },
     "device_not_found": {
       "message": "Device {device_id} is not a Stellantis vehicle of a loaded config entry."
+    },
+    "command_already_pending": {
+      "message": "\"{name}\" was already sent and is still waiting for a response from the vehicle."
     }
   },
   "common": {

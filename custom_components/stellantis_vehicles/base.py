@@ -331,8 +331,14 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         self._prune_command_history()
         self.async_update_listeners()
 
-    async def send_command(self, name, service, message):
+    async def send_command(self, name: str, service: str, message: dict[str, Any]) -> None:
         """ Send a command to the vehicle. """
+        if self.pending_action(name):
+            raise ServiceValidationError(
+                translation_domain = DOMAIN,
+                translation_key = "command_already_pending",
+                translation_placeholders = {"name": name}
+            )
         try:
             action_id = await self._stellantis.send_mqtt_message(service, message, self._vehicle)
             if action_id is not None:
@@ -809,11 +815,21 @@ class StellantisBaseEntity(CoordinatorEntity):
         return value
 
     @property
-    def available_command(self):
-        """ Base availability property for mqtt commands. """
-        mqtt_is_connected = self._stellantis and self._stellantis._mqtt and self._stellantis._mqtt.is_connected()
+    def available_command(self) -> bool:
+        """ Base availability property for mqtt commands.
+
+        Does not factor in whether a command is currently pending: a button
+        stays available while its own command is in flight, and pressing it
+        again is rejected in `send_command` instead of hiding the button via
+        `available` (which produced a spurious "pressed" logbook entry for
+        every button on every press: HA's core `ButtonEntity` already writes
+        a real state change the moment it is actually pressed, so flipping
+        `available` twice more, once to `unavailable` right after sending and
+        once back when the first MQTT update arrives, added two more).
+        """
+        mqtt_is_connected = bool(self._stellantis and self._stellantis._mqtt and self._stellantis._mqtt.is_connected())
         command_is_enabled = self.name not in self._coordinator._disabled_commands
-        return mqtt_is_connected and command_is_enabled and not self._coordinator.pending_action(self.name)
+        return mqtt_is_connected and command_is_enabled
 
     @callback
     def _handle_coordinator_update(self):

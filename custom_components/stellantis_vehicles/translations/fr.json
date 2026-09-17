@@ -483,6 +483,9 @@
     },
     "device_not_found": {
       "message": "L'appareil {device_id} n'est pas un véhicule Stellantis d'une entrée de configuration chargée."
+    },
+    "command_already_pending": {
+      "message": "« {name} » a déjà été envoyé et attend toujours une réponse du véhicule."
     }
   },
   "common": {

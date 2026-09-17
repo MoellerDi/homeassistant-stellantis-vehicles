@@ -473,6 +473,9 @@
     },
     "device_not_found": {
       "message": "Das Gerät {device_id} ist kein Stellantis-Fahrzeug eines geladenen Konfigurationseintrags."
+    },
+    "command_already_pending": {
+      "message": "\"{name}\" wurde bereits gesendet und wartet noch auf eine Antwort vom Fahrzeug."
     }
   },
   "common": {
