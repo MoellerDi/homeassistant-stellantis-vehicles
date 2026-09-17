@@ -467,6 +467,7 @@ class StellantisVehicles(StellantisOauth):
         self._coordinator_dict = {}
         self._vehicles = []
         self._mqtt = None
+        self._mqtt_lock = asyncio.Lock()
         self._mqtt_last_request = None
 
         self._oauth_token_scheduled = None
@@ -598,14 +599,10 @@ class StellantisVehicles(StellantisOauth):
             task.cancel()
         self._pending_tasks.clear()
 
-        # Tear down the MQTT client and join its network thread.
-        if self._mqtt is not None:
-            mqtt_client, self._mqtt = self._mqtt, None
-            # Drop the reconnect / token-refresh callback so the deliberate
-            # disconnect below does not trigger a fresh reconnect attempt.
-            mqtt_client.on_disconnect = None
-            mqtt_client.disconnect()
-            await self._hass.async_add_executor_job(mqtt_client.loop_stop)
+        # Tear down the MQTT client and join its network thread. Guarded by the
+        # same lock as connect_mqtt() so we never race a connect in flight.
+        async with self._mqtt_lock:
+            await self._disconnect_mqtt_locked()
 
         # Close the shared aiohttp session.
         await self.close_session()
@@ -826,13 +823,34 @@ class StellantisVehicles(StellantisOauth):
         self.save_config({"mqtt": mqtt_config})
         self.update_stored_config("mqtt", mqtt_config)
 
+    async def _disconnect_mqtt_locked(self) -> None:
+        """Tear down the current MQTT client and join its network thread.
+
+        Caller must hold self._mqtt_lock. No-op if there is no client.
+        """
+        if self._mqtt is None:
+            return
+        mqtt_client, self._mqtt = self._mqtt, None
+        # Drop the callback so this deliberate disconnect does not trigger a
+        # fresh reconnect / token-refresh attempt.
+        mqtt_client.on_disconnect = None
+        mqtt_client.disconnect()
+        await self._hass.async_add_executor_job(mqtt_client.loop_stop)
+
     @log_call
     async def connect_mqtt(self):
-        if self._shutting_down:
-            # A coordinator refresh still in flight during unload must not
-            # recreate the MQTT client async_shutdown just tore down.
-            return False
-        if self._mqtt is None:
+        # Serialize against concurrent connect_mqtt() calls (e.g. several vehicle
+        # coordinators noticing a dropped connection at once) and against
+        # async_shutdown(), so nobody operates on a client another task just
+        # tore down or replaced.
+        async with self._mqtt_lock:
+            if self._shutting_down:
+                # A coordinator refresh still in flight during unload must not
+                # recreate the MQTT client async_shutdown just tore down.
+                return False
+
+            await self._disconnect_mqtt_locked()
+
             self._mqtt = MqttClientMod(clean_session=True, protocol=mqtt.MQTTv311)
             # self._mqtt.enable_logger(logger=_LOGGER)
             # Reuse Home Assistant's shared, pre-built client SSL context instead
@@ -845,18 +863,17 @@ class StellantisVehicles(StellantisOauth):
             self._mqtt.on_disconnect = self._on_mqtt_disconnect
             self._mqtt.on_message = self._on_mqtt_message
             self._mqtt.on_subscribe = self._on_mqtt_subscribe
-        if self._mqtt.is_connected():
-            self._mqtt.disconnect()
-        self._mqtt.username_pw_set("IMA_OAUTH_ACCESS_TOKEN", self.get_config("mqtt")["access_token"])
-        try:
-            # paho's connect() does blocking DNS + TCP + TLS handshake, so run it in the executor to keep the event loop responsive.
-            await self._hass.async_add_executor_job(
-                self._mqtt.connect, MQTT_SERVER, MQTT_PORT, MQTT_KEEP_ALIVE_S
-            )
-            self._mqtt.loop_start() # Under the hood, this will call loop_forever in a thread, which means that the thread will terminate if we call disconnect()
-        except Exception as e:
-            _LOGGER.warning("Failed to connect to the MQTT broker: %s", e)
-        return self._mqtt.is_connected()
+
+            self._mqtt.username_pw_set("IMA_OAUTH_ACCESS_TOKEN", self.get_config("mqtt")["access_token"])
+            try:
+                # paho's connect() does blocking DNS + TCP + TLS handshake, so run it in the executor to keep the event loop responsive.
+                await self._hass.async_add_executor_job(
+                    self._mqtt.connect, MQTT_SERVER, MQTT_PORT, MQTT_KEEP_ALIVE_S
+                )
+                self._mqtt.loop_start() # Under the hood, this will call loop_forever in a thread, which means that the thread will terminate if we call disconnect()
+            except Exception as e:
+                _LOGGER.warning("Failed to connect to the MQTT broker: %s", e)
+            return self._mqtt.is_connected()
 
     @log_call
     def _on_mqtt_connect(self, client, userdata, result_code, _):
