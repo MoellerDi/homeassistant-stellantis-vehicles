@@ -279,7 +279,7 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         # The section may be missing or explicitly null, and the same is true for
         # its "airConditioning" child, so every step is guarded.
         # The API spells the key with two n. Some vehicles have it with one n, so both are checked.
-        data = self._data.get("preconditioning") or self._data.get("preconditionning") or {}
+        data = self.data.get("preconditioning") or self.data.get("preconditionning") or {}
         air_conditioning = data.get("airConditioning") if isinstance(data, dict) else None
         return air_conditioning if isinstance(air_conditioning, dict) else {}
 
@@ -375,13 +375,13 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         """ Get current preconditioning programs.
 
         Called for every program entity on every coordinator update, so the
-        result is cached per ``self._data`` object and only recomputed when the
+        result is cached per ``self.data`` object and only recomputed when the
         vehicle data is replaced by a refresh.
         """
-        if self._programs_cache is not None and self._programs_cache[0] is self._data:
+        if self._programs_cache is not None and self._programs_cache[0] is self.data:
             return deepcopy(self._programs_cache[1])
         programs = self._compute_programs()
-        self._programs_cache = (self._data, programs)
+        self._programs_cache = (self.data, programs)
         return deepcopy(programs)
 
     def _compute_programs(self):
