@@ -838,7 +838,7 @@ class StellantisVehicles(StellantisOauth):
         await self._hass.async_add_executor_job(mqtt_client.loop_stop)
 
     @log_call
-    async def connect_mqtt(self):
+    async def connect_mqtt(self, force: bool = False):
         # Serialize against concurrent connect_mqtt() calls (e.g. several vehicle
         # coordinators noticing a dropped connection at once) and against
         # async_shutdown(), so nobody operates on a client another task just
@@ -848,6 +848,13 @@ class StellantisVehicles(StellantisOauth):
                 # A coordinator refresh still in flight during unload must not
                 # recreate the MQTT client async_shutdown just tore down.
                 return False
+
+            if not force and self._mqtt is not None and self._mqtt.is_connected():
+                # A concurrent caller (e.g. another vehicle coordinator) already
+                # reconnected while we were waiting for the lock; tearing this
+                # client down again would kill a connection that never got a
+                # chance to settle and receive anything.
+                return True
 
             await self._disconnect_mqtt_locked()
 
@@ -904,8 +911,11 @@ class StellantisVehicles(StellantisOauth):
                 _LOGGER.warning("Subscription failed, will try to reconnect MQTT in 300 seconds")
                 # wait=False: this callback runs on the paho-mqtt network thread, so
                 # blocking it for 300s here would stall the loop (pings, reconnects,
-                # other callbacks)
-                self.do_async(self.connect_mqtt(), 300, wait=False)
+                # other callbacks). force=True: the transport can still look
+                # connected even though the broker refused this subscription, so
+                # connect_mqtt()'s "already connected, nothing to do" shortcut
+                # must not apply here.
+                self.do_async(self.connect_mqtt(force=True), 300, wait=False)
             else:
                 _LOGGER.debug("MQTT subscription completed (QoS: %s)", granted_qos)
         except Exception:
