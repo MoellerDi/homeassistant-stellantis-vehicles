@@ -78,6 +78,10 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         # locally until the user sends them with the send button or drops them
         # with the reset button.
         self._pending_programs = {}
+        # Set once the maintenance endpoint has returned an empty result, so it
+        # is not polled again for the lifetime of this coordinator (issue #623:
+        # some vehicles 404 on every request and flooded the logs).
+        self._maintenance_unsupported = False
 
     @log_call
     async def _async_update_data(self) -> dict[str, Any] | None:
@@ -117,12 +121,16 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         try:
             new_data = await self._stellantis.get_vehicle_status(self._vehicle)
             if new_data:
-                maintenance = await self._stellantis.get_vehicle_maintenance(self._vehicle)
-                new_data["maintenance"] = {
-                    "mileageBeforeMaintenance": maintenance.get("mileageBeforeMaintenance"),
-                    "daysBeforeMaintenance": maintenance.get("daysBeforeMaintenance"),
-                    "updatedAt": maintenance.get("updatedAt")
-                }
+                maintenance = {} if self._maintenance_unsupported else await self._stellantis.get_vehicle_maintenance(self._vehicle)
+                if maintenance:
+                    new_data["maintenance"] = {
+                        "mileageBeforeMaintenance": maintenance.get("mileageBeforeMaintenance"),
+                        "daysBeforeMaintenance": maintenance.get("daysBeforeMaintenance"),
+                        "updatedAt": maintenance.get("updatedAt")
+                    }
+                elif not self._maintenance_unsupported:
+                    _LOGGER.debug("Vehicle maintenance data not found - disabling further maintenance polling")
+                    self._maintenance_unsupported = True
             return new_data
         except ConfigEntryAuthFailed:
             raise
