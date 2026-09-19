@@ -177,6 +177,25 @@ MQTT_TOKEN_RETRY_BACKOFF = (60, 120, 300, 600, 900)
 # transient failure instead of a flat 5-minute loop, and logged at WARNING.
 OAUTH_TOKEN_RETRY_BACKOFF = (60, 120, 300, 600, 900)
 
+PRECONDITIONING_SERVICE = "/ThermalPrecond"
+PRECONDITIONING_PROGRAM_SLOTS = [1, 2, 3, 4]
+PRECONDITIONING_PROGRAM_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+# Placeholder written by the API for an unused or disabled slot. Both values are
+# out of range for a real time, the vehicle uses them to mark "no program here".
+PRECONDITIONING_PROGRAM_DISABLED_HOUR = 34
+PRECONDITIONING_PROGRAM_DISABLED_MINUTE = 7
+
+# "asap" is mandatory in the /ThermalPrecond payload, there is no documented
+# value that means "only store the programs". "deactivate" is used because it
+# does not start a session of its own: a write sent with it was accepted by the
+# vehicle and only the program took effect. It is still unverified whether it
+# cancels a session that is already running, so program writes are refused while
+# preconditioning is on.
+PRECONDITIONING_PROGRAM_ASAP = "deactivate"
+
+SERVICE_SET_PRECONDITIONING_PROGRAM = "set_preconditioning_program"
+
 VEHICLE_TYPE_ELECTRIC = "Electric"
 VEHICLE_TYPE_HYBRID = "Hybrid"
 VEHICLE_TYPE_THERMIC = "Thermic"
