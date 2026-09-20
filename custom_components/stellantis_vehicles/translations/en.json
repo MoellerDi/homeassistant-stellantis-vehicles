@@ -405,6 +405,11 @@
       }
     }
   },
+  "exceptions": {
+    "charge_command_time_missing": {
+      "message": "Cannot send \"{name}\": the vehicle has not reported a charging start time yet, wait for the next update or set one manually first."
+    }
+  },
   "common": {
     "access_token_error_title": "Access token error",
     "access_token_error_message": "Check out the official documentation in the [OAuth2 Code]({oauth_token_doc_link}) section",

@@ -17,7 +17,7 @@ from homeassistant.components.time import TimeEntity
 from homeassistant.core import callback, HomeAssistant
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.const import ( STATE_UNAVAILABLE, STATE_UNKNOWN, STATE_ON, STATE_OFF)
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed, ServiceValidationError
 from homeassistant.helpers import issue_registry as ir
 
 from .utils import ( time_from_pt_string, get_datetime, date_from_pt_string, time_from_string, rate_limit, log_call, SENSITIVE_DATA_FILTER )
@@ -317,6 +317,16 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
             current_status = self._sensors.get("battery_charging")
             if current_status != "InProgress":
                     action = "delayed"
+        if current_hour is None:
+            # No charging start time known yet (e.g. the vehicle has not
+            # reported one and none was restored/set manually): "hour"/"minute"
+            # are mandatory in the /VehCharge payload, so there is nothing valid
+            # to send yet.
+            raise ServiceValidationError(
+                translation_domain = DOMAIN,
+                translation_key = "charge_command_time_missing",
+                translation_placeholders = {"name": button_name}
+            )
         await self.send_command(button_name, "/VehCharge", {"program": {"hour": current_hour.hour, "minute": current_hour.minute}, "type": action})
 
     async def send_charge_limit_command(self, button_name, action):
@@ -443,6 +453,12 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         if not (charge_limit_on and charge_limit and "battery" in self._sensors):
             return
         if int(float(self._sensors.get("battery"))) < int(charge_limit):
+            return
+        if self._sensors.get("time_battery_charging_start") is None:
+            # send_charge_command needs an "hour"/"minute" to send, and none is
+            # known yet for this vehicle - retry on a later update instead of
+            # failing the whole coordinator refresh.
+            _LOGGER.debug("Cannot auto-stop charging for vehicle '%s' yet: no charging start time known", self._vehicle["vin"])
             return
         button_name = self.get_translation("component.stellantis_vehicles.entity.button.charge_stop.name")
         await self.send_charge_command(button_name, False, "delayed")
