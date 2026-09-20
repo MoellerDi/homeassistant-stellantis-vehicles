@@ -7,6 +7,7 @@ from time import monotonic, process_time
 from functools import wraps
 import re
 from typing import Any, Dict
+from weakref import WeakKeyDictionary
 
 from homeassistant.util import dt
 
@@ -126,16 +127,23 @@ def log_call(func):
 def rate_limit(limit: int, every: int):
     """Reject calls once `limit` of them have run within the last `every` seconds.
 
-    Timestamps of the recent successful calls are kept in a deque and pruned on
-    each call once they fall outside the window. No background tasks are
-    involved, so there is nothing to cancel on unload.
+    Meant to decorate an instance method: the budget is tracked per `self`
+    (e.g. per vehicle coordinator, per account), not shared by every instance
+    of the decorated method. Timestamps of the recent successful calls are
+    kept in a deque and pruned on each call once they fall outside the
+    window. No background tasks are involved, so there is nothing to cancel
+    on unload.
     """
     def limit_decorator(func):
-        # Monotonic timestamps of the last (up to `limit`) successful calls.
-        calls: deque[float] = deque()
+        # Monotonic timestamps of the last (up to `limit`) successful calls,
+        # per instance the decorated method is called on. A WeakKeyDictionary
+        # so an instance's entry is dropped once nothing else references it,
+        # instead of pinning every coordinator/account object ever created.
+        calls_by_instance: WeakKeyDictionary[Any, deque[float]] = WeakKeyDictionary()
 
         @wraps(func)
-        async def async_wrapper(*args, **kwargs):
+        async def async_wrapper(self, *args, **kwargs):
+            calls = calls_by_instance.setdefault(self, deque())
             now = monotonic()
             while calls and now - calls[0] >= every:
                 calls.popleft()
@@ -144,7 +152,7 @@ def rate_limit(limit: int, every: int):
                 raise RateLimitException("rate_limit")
 
             calls.append(now)
-            return await func(*args, **kwargs)
+            return await func(self, *args, **kwargs)
 
         return async_wrapper
 
