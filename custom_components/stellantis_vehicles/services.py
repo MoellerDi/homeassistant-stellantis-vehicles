@@ -48,9 +48,12 @@ def get_coordinator_for_device(
             entry = hass.config_entries.async_get_entry(entry_id)
             if entry is None or entry.domain != DOMAIN:
                 continue
-            # The StellantisVehicles instance is stored on ConfigEntry.runtime_data
-            # and is None while the entry is unloaded or failed to set up.
-            stellantis = entry.runtime_data
+            # ConfigEntry.runtime_data is only a type annotation, not a real
+            # attribute with a default: HA deletes it on unload and never
+            # sets it before the first successful setup, so a plain
+            # `.runtime_data` here can raise AttributeError instead of just
+            # being None while the entry is unloaded or failed to set up.
+            stellantis = getattr(entry, "runtime_data", None)
             if stellantis and (coordinator := stellantis.async_get_coordinator_by_vin(vin)):
                 return coordinator
     return None
