@@ -69,6 +69,7 @@ from .const import (
     ABRP_API_KEY,
     TRANSLATION_PLACEHOLDERS,
     MQTT_TOKEN_RETRY_BACKOFF,
+    MQTT_OTP_RETRY_LIMIT,
     OAUTH_TOKEN_RETRY_BACKOFF
 )
 
@@ -507,6 +508,7 @@ class StellantisVehicles(StellantisOauth):
         self._oauth_token_scheduled = None
         self._mqtt_token_scheduled = None
         self._mqtt_token_retry = 0
+        self._mqtt_otp_retry = 0
         self._oauth_token_retry = 0
 
     def set_entry(self, entry:ConfigEntry) -> None:
@@ -851,6 +853,14 @@ class StellantisVehicles(StellantisOauth):
         _log_http_exchange(url, headers, vehicle_maintenance_request)
         return vehicle_maintenance_request
 
+    def _otp_retry_backoff(self) -> float | None:
+        """Return the next OTP retry delay in seconds, or None once MQTT_OTP_RETRY_LIMIT is exhausted."""
+        self._mqtt_otp_retry += 1
+        if self._mqtt_otp_retry > MQTT_OTP_RETRY_LIMIT:
+            return None
+        idx = min(self._mqtt_otp_retry - 1, len(MQTT_TOKEN_RETRY_BACKOFF) - 1)
+        return MQTT_TOKEN_RETRY_BACKOFF[idx]
+
     @log_call
     async def scheduled_mqtt_token_refresh(self, now=None, force=False):
         if not self.remote_commands:
@@ -864,6 +874,7 @@ class StellantisVehicles(StellantisOauth):
             if force or get_datetime() > get_next_run():
                 await self.refresh_mqtt_token_request()
             self._mqtt_token_retry = 0
+            self._mqtt_otp_retry = 0
             next_run = get_next_run()
         except CommunicationError as err:
             self._mqtt_token_retry += 1
@@ -880,24 +891,43 @@ class StellantisVehicles(StellantisOauth):
             _LOGGER.warning("Rate limit exceeded, retry after 1 day or check logs and restart integration")
             next_run = get_datetime() + timedelta(days=1)
         except ConfigException:
-            self._mqtt_token_retry = 0
-            self.disable_remote_commands()
-            await self.hass_notify("reconfigure_otp")
-            _LOGGER.error("MQTT authentication error. To enable remote commands again please reconfigure the integration")
-            return
+            delay = self._otp_retry_backoff()
+            if delay is not None:
+                delay += random.uniform(0, delay * 0.1)
+                next_run = get_datetime() + timedelta(seconds=delay)
+                _LOGGER.warning(
+                    "MQTT OTP activation failed (attempt %s/%s), next retry at %s",
+                    self._mqtt_otp_retry, MQTT_OTP_RETRY_LIMIT, next_run,
+                )
+            else:
+                self._mqtt_otp_retry = 0
+                self.disable_remote_commands()
+                await self.hass_notify("reconfigure_otp")
+                _LOGGER.error("MQTT authentication error. To enable remote commands again please reconfigure the integration")
+                return
         except ConfigEntryAuthFailed as err:
             # OTP material missing or rejected (get_otp_code, the OTP token
-            # request): nothing to retry, the entry has to be reconfigured.
-            self._mqtt_token_retry = 0
-            self.disable_remote_commands()
-            await self.hass_notify("reconfigure_otp")
-            _LOGGER.error("MQTT authentication failed, starting the reauth flow: %s", err)
-            try:
-                if self._entry is not None:
-                    self._entry.async_start_reauth(self._hass)
-            except Exception:
-                _LOGGER.exception("Could not start the reauth flow")
-            return
+            # request): retried like any other OTP failure below, the entry
+            # only has to be reconfigured once MQTT_OTP_RETRY_LIMIT is hit.
+            delay = self._otp_retry_backoff()
+            if delay is not None:
+                delay += random.uniform(0, delay * 0.1)
+                next_run = get_datetime() + timedelta(seconds=delay)
+                _LOGGER.warning(
+                    "MQTT authentication failed (attempt %s/%s), next retry at %s: %s",
+                    self._mqtt_otp_retry, MQTT_OTP_RETRY_LIMIT, next_run, err,
+                )
+            else:
+                self._mqtt_otp_retry = 0
+                self.disable_remote_commands()
+                await self.hass_notify("reconfigure_otp")
+                _LOGGER.error("MQTT authentication failed, starting the reauth flow: %s", err)
+                try:
+                    if self._entry is not None:
+                        self._entry.async_start_reauth(self._hass)
+                except Exception:
+                    _LOGGER.exception("Could not start the reauth flow")
+                return
         except Exception:
             # Same shape as scheduled_oauth_token_refresh: the timer was cleared
             # inside the try and is only re-armed below.

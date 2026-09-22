@@ -140,6 +140,13 @@ COMMAND_HISTORY_LIMIT = 50
 # retried every ~15 min instead of once a minute.
 MQTT_TOKEN_RETRY_BACKOFF = (60, 120, 300, 600, 900)
 
+# Max retries for an OTP activation/token failure (ConfigException /
+# ConfigEntryAuthFailed) before giving up and disabling remote commands.
+# Kept smaller than len(MQTT_TOKEN_RETRY_BACKOFF), both to recover reasonably
+# fast and to avoid spending too much of the 6/day OTP call budget on retries
+# of a single failure.
+MQTT_OTP_RETRY_LIMIT = 3
+
 # Same schedule for the OAuth token refresh: retried on a capped backoff after a
 # transient failure instead of a flat 5-minute loop, and logged at WARNING.
 OAUTH_TOKEN_RETRY_BACKOFF = (60, 120, 300, 600, 900)
