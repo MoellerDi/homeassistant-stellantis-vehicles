@@ -39,6 +39,7 @@ from .const import (
     FIELD_COUNTRY_CODE,
     FIELD_REMOTE_COMMANDS,
     FIELD_NOTIFICATIONS,
+    FIELD_MQTT_LIVE_UPDATES,
     MOBILE_APPS,
     OAUTH_AUTHORIZE_URL,
     OAUTH_TOKEN_URL,
@@ -1048,8 +1049,11 @@ class StellantisVehicles(StellantisOauth):
         self._hass.loop.call_soon_threadsafe(self._update_all_listeners)
         try:
             topics = [MQTT_RESP_TOPIC + self.get_config("customer_id") + "/#"]
-            for vehicle in self._vehicles:
-                topics.append(MQTT_EVENT_TOPIC + vehicle["vin"])
+            # Vehicle events only feed the MQTT live updates, so without
+            # those the event topic isn't subscribed at all.
+            if self.get_config(FIELD_MQTT_LIVE_UPDATES) is not False:
+                for vehicle in self._vehicles:
+                    topics.append(MQTT_EVENT_TOPIC + vehicle["vin"])
             # paho's SUBACK callback only carries the mid, so remember which topic it belongs to.
             self._mqtt_subscriptions.clear()
             for topic in topics:
