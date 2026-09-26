@@ -43,6 +43,15 @@ _LOGGER = logging.getLogger(__name__)
 # (issue #414, PR #593).
 _LOGGER.addFilter(SENSITIVE_DATA_FILTER)
 
+# Event fields overlaid onto the REST data, grouped by the REST section they
+# update. Freshness is tracked per group (see _track_mqtt_changes), so every
+# field _overlay_mqtt_state writes must be covered here.
+_MQTT_OVERLAY_GROUPS = {
+    "charging": lambda event: ((event.get("charging") or {}).get("hmi_state_code"), (event.get("charging") or {}).get("plugged")),
+    "doors": lambda event: (event.get("doors") or {}).get("locking_state_code"),
+}
+
+
 class StellantisVehicleCoordinator(DataUpdateCoordinator):
     def __init__(self, hass:HomeAssistant, config, vehicle, stellantis, translations, config_entry) -> None:
         super().__init__(hass, _LOGGER, config_entry=config_entry, name = DOMAIN, update_interval=timedelta(seconds=UPDATE_INTERVAL))
@@ -55,9 +64,10 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         self._sensors = {}
         self._features = {}
         # Last accepted MQTT vehicle event (see apply_mqtt_event) and the
-        # ordering state that goes with it.
+        # ordering/freshness state that goes with it.
         self._mqtt_state = {}
         self._mqtt_last_key = None
+        self._mqtt_changed_at:dict[str, datetime | None] = {}
         self._commands_history = {}
         self._disabled_commands = []
         # action_id of the command currently blocking further remote
@@ -92,6 +102,9 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
 
         if self._is_stale(new_data):
             return self.data
+
+        if self._mqtt_state:
+            self._overlay_mqtt_state(new_data)
 
         await self.after_async_update_data(new_data)
         return new_data
@@ -253,7 +266,10 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         """ Apply a parsed MQTT vehicle event (see parse_mqtt_event).
 
         Events for a given VIN are not guaranteed to arrive in order, so
-        older ones are discarded first.
+        older ones are discarded first. Only the fields in
+        _MQTT_OVERLAY_GROUPS reach the entities (see _overlay_mqtt_state);
+        battery level and range stay REST-only, as the MQTT values lag
+        behind REST and spike (checked against a month of both).
         """
         if not self._accept_mqtt_event_order(event):
             return
@@ -267,7 +283,13 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
             # Nothing actually changed (a duplicate) - don't wake entities for it.
             return
 
+        self._track_mqtt_changes(event)
         self._mqtt_state = event
+        if self.data:
+            data = deepcopy(self.data)
+            self._overlay_mqtt_state(data)
+            # Not async_set_updated_data(): that would reset the REST poll timer.
+            self.data = data
         self.async_update_listeners()
 
     def _accept_mqtt_event_order(self, event:dict[str, Any]) -> bool:
@@ -296,6 +318,67 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
 
         self._mqtt_last_key = key
         return True
+
+    def _track_mqtt_changes(self, event:dict[str, Any]) -> None:
+        """ Record, per overlay group, when its values last changed via MQTT.
+
+        Events repeat the last known values with a fresh timestamp (in real
+        captures soc_batt stayed at a stale 58 for hours while REST already
+        reported 53), so the event timestamp says nothing about how fresh a
+        value is; only a change seen via MQTT does. The first event after
+        startup has nothing to compare with, so its values are left to REST
+        (None) until they change.
+        """
+        event_dt = parse_timestamp(event.get("timestamp"))
+        for group, values in _MQTT_OVERLAY_GROUPS.items():
+            if not self._mqtt_state:
+                self._mqtt_changed_at[group] = None
+            elif values(event) != values(self._mqtt_state):
+                self._mqtt_changed_at[group] = event_dt
+
+    def _overlay_mqtt_state(self, data:dict[str, Any]) -> None:
+        """ Write the fields of the last accepted MQTT event into REST-shaped ``data``, in place.
+
+        Entities keep reading ``coordinator.data`` via their value_map, so the
+        event is translated into the REST vocabulary. Each group is only
+        overwritten if it last changed via MQTT after that section's REST
+        timestamp, so a later REST poll wins again. Fields without a
+        confirmed mapping are left to REST.
+        """
+        event = self._mqtt_state
+
+        electric = next((energy for energy in data.get("energies") or [] if energy.get("type") == "Electric"), None)
+        if electric is not None and self._mqtt_is_newer("charging", electric.get("createdAt") or data.get("updatedAt")):
+            event_charging = event.get("charging") or {}
+            charging = electric.setdefault("extension", {}).setdefault("electric", {}).setdefault("charging", {})
+            # hmi_state codes matched against REST status at the same
+            # timestamp; REST reports plugged-but-idle as Disconnected too.
+            # 2 and 4 (seen around charge start) are unmapped.
+            charging_status = {0: "Disconnected", 1: "InProgress", 3: "Stopped"}.get(event_charging.get("hmi_state_code"))
+            if charging_status:
+                charging["status"] = charging_status
+            if event_charging.get("plugged") is not None:
+                charging["plugged"] = event_charging["plugged"]
+
+        doors_state = data.get("doorsState")
+        if doors_state is not None and self._mqtt_is_newer("doors", doors_state.get("createdAt") or data.get("updatedAt")):
+            locking_code = (event.get("doors") or {}).get("locking_state_code")
+            locked_states = doors_state.get("lockedStates") or []
+            # Only touch lockedStates when the lock state actually differs, so
+            # finer REST values (e.g. SuperLocked) survive. 0 and 7 are
+            # transient mid-(un)lock steps and are ignored.
+            if locking_code == 1 and "Unlocked" in locked_states:
+                doors_state["lockedStates"] = ["Locked"]
+            elif locking_code == 3 and "Unlocked" not in locked_states:
+                doors_state["lockedStates"] = ["Unlocked"]
+
+    def _mqtt_is_newer(self, group:str, rest_timestamp:Any) -> bool:
+        """ Whether the group's last MQTT change is newer than the REST timestamp (a missing one counts as older). """
+        changed_at = self._mqtt_changed_at.get(group)
+        if changed_at is None:
+            return False
+        rest_dt = parse_timestamp(rest_timestamp)
+        return rest_dt is None or changed_at > rest_dt
 
     @property
     def command_history(self):
