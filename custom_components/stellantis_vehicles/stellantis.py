@@ -39,6 +39,7 @@ from .const import (
     FIELD_COUNTRY_CODE,
     FIELD_REMOTE_COMMANDS,
     FIELD_NOTIFICATIONS,
+    FIELD_MQTT_LIVE_UPDATES,
     MOBILE_APPS,
     OAUTH_AUTHORIZE_URL,
     OAUTH_TOKEN_URL,
@@ -1016,8 +1017,11 @@ class StellantisVehicles(StellantisOauth):
         _LOGGER.debug("MQTT connected (code %s)", result_code)
         try:
             topics = [MQTT_RESP_TOPIC + self.get_config("customer_id") + "/#"]
-            for vehicle in self._vehicles:
-                topics.append(MQTT_EVENT_TOPIC + vehicle["vin"])
+            # Vehicle events only feed the MQTT live updates, so without
+            # those the event topic isn't subscribed at all.
+            if self.get_config(FIELD_MQTT_LIVE_UPDATES) is not False:
+                for vehicle in self._vehicles:
+                    topics.append(MQTT_EVENT_TOPIC + vehicle["vin"])
             for topic in topics:
                 client.subscribe(topic, qos=MQTT_QOS)
                 _LOGGER.debug("Subscribed to MQTT topic %s", topic)
