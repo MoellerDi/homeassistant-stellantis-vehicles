@@ -50,6 +50,7 @@ _MQTT_OVERLAY_GROUPS = {
     "charging": lambda event: ((event.get("charging") or {}).get("hmi_state_code"), (event.get("charging") or {}).get("plugged")),
     "doors": lambda event: (event.get("doors") or {}).get("locking_state_code"),
     "preconditioning": lambda event: (event.get("preconditioning") or {}).get("status_code"),
+    "door_opening": lambda event: (event.get("doors") or {}).get("open"),
 }
 
 
@@ -372,6 +373,14 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
                 doors_state["lockedStates"] = ["Locked"]
             elif locking_code == 3 and "Unlocked" not in locked_states:
                 doors_state["lockedStates"] = ["Unlocked"]
+
+        if doors_state is not None and self._mqtt_is_newer("door_opening", doors_state.get("createdAt") or data.get("updatedAt")):
+            door_open = (event.get("doors") or {}).get("open") or {}
+            names = {"Driver": "driver", "Passenger": "passenger", "RearLeft": "rear_left", "RearRight": "rear_right", "Trunk": "trunk"}
+            for opening in doors_state.get("opening") or []:
+                name = names.get(opening.get("identifier"))
+                if name in door_open:
+                    opening["state"] = "Open" if door_open[name] else "Closed"
 
         # REST sends this section as "preconditioning", "preconditionning" or
         # both, depending on the vehicle; keep every copy consistent.
