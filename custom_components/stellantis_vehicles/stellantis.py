@@ -507,6 +507,8 @@ class StellantisVehicles(StellantisOauth):
         self._vehicles = []
         self._fake_vehicle_added = False
         self._mqtt = None
+        # paho still reports is_connected() while on_disconnect runs
+        self._mqtt_connected = False
         self._mqtt_lock = asyncio.Lock()
         self._mqtt_subscribe_to_event_topic = True
 
@@ -1045,9 +1047,15 @@ class StellantisVehicles(StellantisOauth):
         mqtt_client.disconnect()
         await self._hass.async_add_executor_job(mqtt_client.loop_stop)
 
+    def _update_all_listeners(self):
+        for coordinator in self._coordinator_dict.values():
+            coordinator.async_update_listeners()
+
     @log_call
     def _on_mqtt_connect(self, client, userdata, result_code, _):
         _LOGGER.debug("MQTT connected (code %s)", result_code)
+        self._mqtt_connected = True
+        self._hass.loop.call_soon_threadsafe(self._update_all_listeners)
         try:
             topics = [MQTT_RESP_TOPIC + self.get_config("customer_id") + "/#"]
             # Vehicle events only feed the MQTT live updates, so without
@@ -1064,6 +1072,8 @@ class StellantisVehicles(StellantisOauth):
     @log_call
     def _on_mqtt_disconnect(self, client, userdata, result_code):
         _LOGGER.debug("MQTT disconnected (code %s: %s)", result_code, mqtt.error_string(result_code))
+        self._mqtt_connected = False
+        self._hass.loop.call_soon_threadsafe(self._update_all_listeners)
         if result_code == 5:
             # MQTT_ERR_CONN_REFUSED: confirmed from logs to occur when the
             # broker closes the whole connection instead of a per-topic
