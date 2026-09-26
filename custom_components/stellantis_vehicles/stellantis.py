@@ -31,6 +31,7 @@ from .base import StellantisVehicleCoordinator
 from .otp.otp import Otp, save_otp, load_otp, ConfigException
 from .utils import ( get_datetime, rate_limit, SENSITIVE_DATA_FILTER, replace_string_placeholders, log_call, resolve_mqtt_resp_data_error )
 from .exceptions import ( CommunicationError, RateLimitException )
+from .mqtt_event import parse_mqtt_event
 
 from .const import (
     DOMAIN,
@@ -1157,11 +1158,16 @@ class StellantisVehicles(StellantisOauth):
                     _LOGGER.error("No result code")
 
             elif msg.topic.startswith(MQTT_EVENT_TOPIC):
-#                 charge_info = data["charging_state"]
-#                 programs = data["precond_state"].get("programs", None)
-#                 if programs:
-#                     self.precond_programs[data["vin"]] = data["precond_state"]["programs"]
-                _LOGGER.debug("Update data from mqtt?!?")
+                event = parse_mqtt_event(data)
+                _LOGGER.debug("Parsed vehicle event: %s", event)
+                coordinator = self.async_get_coordinator_by_vin(event.get("vin"))
+                if coordinator:
+                    # Runs on the paho thread: hand the event to the event loop
+                    # without blocking; the loop logs any error it raises.
+                    if not self._shutting_down:
+                        self._hass.loop.call_soon_threadsafe(coordinator.apply_mqtt_event, event)
+                else:
+                    _LOGGER.debug("No coordinator found for vehicle event (vin %s)", event.get("vin"))
         except Exception:
             _LOGGER.exception("Error while handling MQTT message")
 

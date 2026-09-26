@@ -21,6 +21,7 @@ from homeassistant.const import ( STATE_UNAVAILABLE, STATE_UNKNOWN, STATE_ON, ST
 from homeassistant.exceptions import ( ConfigEntryAuthFailed, ServiceValidationError )
 from homeassistant.helpers import issue_registry as ir
 
+from .mqtt_event import event_content
 from .utils import ( time_from_pt_string, get_datetime, date_from_pt_string, time_from_string, parse_timestamp, rate_limit, log_call, parse_vehicle_rights, vehicle_removed_issue_id, SENSITIVE_DATA_FILTER )
 from .exceptions import CommunicationError, RateLimitException
 
@@ -55,6 +56,10 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         self._vehicle = vehicle
         self._stellantis = stellantis
         self._sensors = {}
+        # Last accepted MQTT vehicle event (see apply_mqtt_event) and the
+        # ordering state that goes with it.
+        self._mqtt_state = {}
+        self._mqtt_last_key = None
         self._commands_history = {}
         self._disabled_commands = []
         # action_id of the command currently blocking further remote
@@ -272,6 +277,55 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
     def vehicle_type(self):
         """ Vehicle type. """
         return self._vehicle["type"]
+
+    @property
+    def mqtt_state(self) -> dict[str, Any]:
+        """ Last accepted MQTT vehicle event (see parse_mqtt_event), or {} before the first one. """
+        return self._mqtt_state
+
+    @callback
+    def apply_mqtt_event(self, event:dict[str, Any]) -> None:
+        """ Apply a parsed MQTT vehicle event (see parse_mqtt_event).
+
+        Events for a given VIN are not guaranteed to arrive in order, so
+        older ones are discarded first.
+        """
+        if not self._accept_mqtt_event_order(event):
+            return
+
+        if event_content(event) == event_content(self._mqtt_state):
+            # Nothing actually changed (a duplicate) - don't wake entities for it.
+            return
+
+        self._mqtt_state = event
+        self.async_update_listeners()
+
+    def _accept_mqtt_event_order(self, event:dict[str, Any]) -> bool:
+        """ Reject an MQTT event older than the last one accepted for this vehicle.
+
+        Ordering key is (timestamp, event_counter). event_counter resets to 1
+        on a new session, but the newer timestamp already orders that
+        correctly. Don't special-case counter 1: it is always the
+        session-start snapshot (reason 0), which often arrives after the
+        session's next events while still holding the older state. A missing
+        or unparsable timestamp or a missing counter can't be placed in the
+        sequence, so the event is accepted rather than silently dropped.
+        """
+        timestamp = parse_timestamp(event.get("timestamp"))
+        counter = event.get("event_counter")
+        if timestamp is None or counter is None:
+            return True
+
+        key = (timestamp, counter)
+        if self._mqtt_last_key is not None and key < self._mqtt_last_key:
+            _LOGGER.debug(
+                "Discarding out-of-order MQTT event for %s (key %s < last accepted %s)",
+                self._vehicle["vin"], key, self._mqtt_last_key,
+            )
+            return False
+
+        self._mqtt_last_key = key
+        return True
 
     @property
     def command_history(self):
