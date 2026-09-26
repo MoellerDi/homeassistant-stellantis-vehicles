@@ -179,4 +179,9 @@ def _coordinator_diagnostics(
         "raw_status": _scrub_substrings(
             async_redact_data(coordinator.data, TO_REDACT), secrets
         ),
+        "mqtt_features": coordinator.features,
+        # Last accepted MQTT vehicle event, parsed (see parse_mqtt_event).
+        "mqtt_state": _scrub_substrings(
+            async_redact_data(coordinator.mqtt_state, TO_REDACT), secrets
+        ),
     }
