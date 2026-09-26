@@ -346,6 +346,11 @@ class StellantisVehiclesConfigFlow(ConfigFlow, domain=DOMAIN):
             self.data.update({FIELD_REMOTE_COMMANDS: entry_data[FIELD_REMOTE_COMMANDS]})
         if "customer_id" in entry_data:
             self.data.update({"customer_id": entry_data["customer_id"]})
+        # Reauth also passes through the options form, which would otherwise
+        # show (and on submit save) the defaults instead of the current choices.
+        for key in (FIELD_NOTIFICATIONS, FIELD_ANONYMIZE_LOGS):
+            if key in entry_data:
+                self.data[key] = entry_data[key]
         return await self.async_step_reauth_confirm()
 
 
