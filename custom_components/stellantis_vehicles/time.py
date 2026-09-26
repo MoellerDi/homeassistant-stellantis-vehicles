@@ -3,12 +3,14 @@ import logging
 from homeassistant.core import HomeAssistant
 from homeassistant.components.time import TimeEntityDescription
 
-from .base import StellantisBaseTime
+from .base import ( StellantisBaseTime, StellantisPreconditioningProgramEntity )
+from .utils import preconditioning_program_time
 
 from .const import (
     VEHICLE_TYPE_ELECTRIC,
     VEHICLE_TYPE_HYBRID,
-    ATTR_VEHICLE_REPORTED_AT
+    ATTR_VEHICLE_REPORTED_AT,
+    PRECONDITIONING_PROGRAM_SLOTS
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -32,6 +34,15 @@ async def async_setup_entry(hass:HomeAssistant, entry, async_add_entities) -> No
                 icon = "mdi:battery-clock"
             )
             entities.extend([StellantisBatteryChargingStart(coordinator, description)])
+
+            for slot in PRECONDITIONING_PROGRAM_SLOTS:
+                description = TimeEntityDescription(
+                    name = f"preconditioning_p{slot}_time",
+                    key = f"preconditioning_p{slot}_time",
+                    translation_key = f"preconditioning_p{slot}_time",
+                    icon = "mdi:calendar-clock"
+                )
+                entities.extend([StellantisPreconditioningProgramTime(coordinator, description, slot)])
 
     async_add_entities(entities)
 
@@ -58,3 +69,16 @@ class StellantisBatteryChargingStart(StellantisBaseTime):
             self._attr_extra_state_attributes[ATTR_VEHICLE_REPORTED_AT] = reported_at
         if self.value_was_updated():
             self._attr_native_value = self.get_value(self._value_map)
+
+
+class StellantisPreconditioningProgramTime(StellantisPreconditioningProgramEntity, StellantisBaseTime):
+    async def async_set_value(self, value):
+        """ Stage the time locally; sent to the vehicle with the send button. """
+        self._coordinator._sensors[self._sensor_key] = value
+        self._coordinator.stage_program(self._slot, hour=value.hour, minute=value.minute)
+        self._coordinator.async_update_listeners()
+
+    def coordinator_update(self):
+        if not self.has_program_data or self.staged_program.keys() & {"hour", "minute"}:
+            return
+        self._coordinator._sensors[self._sensor_key] = preconditioning_program_time(self.program)

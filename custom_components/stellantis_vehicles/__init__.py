@@ -12,6 +12,7 @@ from homeassistant.components.http import StaticPathConfig
 
 from .stellantis import StellantisVehicles
 from .config_flow import StellantisVehiclesConfigFlow
+from .services import async_setup_services
 
 from .const import (
     DOMAIN,
@@ -34,7 +35,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     file_path = os.path.join(os.path.dirname(__file__), "frontend", "stellantis-vehicle-card.js")
     await hass.http.async_register_static_paths([StaticPathConfig(url, str(file_path), False)])
     add_extra_js_url(hass, url)
+    async_setup_services(hass)
     return True
+
 
 async def async_setup_entry(hass: HomeAssistant, config: ConfigEntry):
 
