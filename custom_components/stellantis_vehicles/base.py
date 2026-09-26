@@ -20,7 +20,7 @@ from homeassistant.const import ( STATE_UNAVAILABLE, STATE_UNKNOWN, STATE_ON, ST
 from homeassistant.exceptions import ( ConfigEntryAuthFailed, ServiceValidationError )
 from homeassistant.helpers import issue_registry as ir
 
-from .utils import ( time_from_pt_string, get_datetime, date_from_pt_string, time_from_string, rate_limit, log_call, SENSITIVE_DATA_FILTER )
+from .utils import ( time_from_pt_string, get_datetime, date_from_pt_string, time_from_string, parse_timestamp, rate_limit, log_call, SENSITIVE_DATA_FILTER )
 
 from .const import (
     DOMAIN,
@@ -151,20 +151,15 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         # Sustained outage: surface it so entities go unavailable.
         raise UpdateFailed("Empty vehicle status response")
 
-    def _is_stale(self, new_data: dict[str, Any]) -> bool:
+    def _is_stale(self, new_data:dict[str, Any]) -> bool:
         """ Whether new_data's updatedAt is not newer than the currently held data. """
         if "updatedAt" not in new_data or not self.data or "updatedAt" not in self.data:
             return False
-        try:
-            current_dt = datetime.fromisoformat(self.data["updatedAt"])
-            new_dt = datetime.fromisoformat(new_data["updatedAt"])
-        except (ValueError, TypeError):
+        current_dt = parse_timestamp(self.data["updatedAt"])
+        new_dt = parse_timestamp(new_data["updatedAt"])
+        if current_dt is None or new_dt is None:
             _LOGGER.debug("Invalid updatedAt values, proceeding with update without timestamp comparison")
             return False
-        if current_dt.tzinfo is None:
-            current_dt = current_dt.replace(tzinfo=UTC)
-        if new_dt.tzinfo is None:
-            new_dt = new_dt.replace(tzinfo=UTC)
         if new_dt <= current_dt:
             _LOGGER.debug("API did not return updated vehicle data, skipping sensor update")
             return True
