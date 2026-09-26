@@ -49,6 +49,7 @@ _LOGGER.addFilter(SENSITIVE_DATA_FILTER)
 _MQTT_OVERLAY_GROUPS = {
     "charging": lambda event: ((event.get("charging") or {}).get("hmi_state_code"), (event.get("charging") or {}).get("plugged")),
     "doors": lambda event: (event.get("doors") or {}).get("locking_state_code"),
+    "preconditioning": lambda event: (event.get("preconditioning") or {}).get("status_code"),
 }
 
 
@@ -371,6 +372,15 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
                 doors_state["lockedStates"] = ["Locked"]
             elif locking_code == 3 and "Unlocked" not in locked_states:
                 doors_state["lockedStates"] = ["Unlocked"]
+
+        # REST sends this section as "preconditioning", "preconditionning" or
+        # both, depending on the vehicle; keep every copy consistent.
+        for key in ("preconditioning", "preconditionning"):
+            air_conditioning = (data.get(key) or {}).get("airConditioning")
+            if air_conditioning is not None and self._mqtt_is_newer("preconditioning", air_conditioning.get("createdAt") or data.get("updatedAt")):
+                status = {0: "Disabled", 1: "Enabled", 2: "Finished"}.get((event.get("preconditioning") or {}).get("status_code"))
+                if status:
+                    air_conditioning["status"] = status
 
     def _mqtt_is_newer(self, group:str, rest_timestamp:Any) -> bool:
         """ Whether the group's last MQTT change is newer than the REST timestamp (a missing one counts as older). """
