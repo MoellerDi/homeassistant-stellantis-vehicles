@@ -10,9 +10,9 @@ Open items are sorted by priority: a rough combination of how likely the trigger
 |---|-----|-----------|--------|
 | 24 | `otp/otp.py` logs through a logger the `SENSITIVE_DATA_FILTER` was never attached to | Requires `DEBUG` logging enabled, but that's exactly what users turn on while troubleshooting a failing OTP/reauth flow | Very high - leaks the OTP code itself plus the InWebo `Kiw`/`Kfact` key material in clear text, regardless of "Anonymize personal data on logs" |
 | 25 | The OTP code is never registered with the log filter, so it stays unmasked even in a filtered logger | Narrower than #24 - needs the OTP-token-exchange HTTP request itself to fail, plus `DEBUG` logging | High - same credential as #24 leaks, this time via `make_http_request`'s own failed-request debug log |
-| 15 | MQTT connection can loop forever refuse/reconnect for accounts not entitled to the event topic (`upstream/develop`) | Unknown subset of accounts, but confirmed to happen in production (fixed from real log evidence) | Very high for affected accounts - remote commands never work at all, no clear diagnostic |
 | 13 | `get_programs()` (`upstream/develop`) only checks the double-n "preconditionning" API spelling | Subset of vehicles (those reporting the single-n spelling), but certain for them, every time | High - silently erases the vehicle's real preconditioning schedule when start/stop is pressed |
 | 4 | `_auto_stop_charge_at_limit` can crash with `AttributeError`/`TypeError` | Low-medium (narrow first-poll timing window) | Medium - that vehicle's coordinator update crashes, entities briefly unavailable, self-recovers |
+| 37 | A refused MQTT connect never triggers the token refresh: `_on_mqtt_disconnect` waits for `result_code == 11`, which paho never delivers | Low - the scheduled MQTT token refresh normally renews the token before it expires, so it takes an expired or revoked token outside that schedule (e.g. after the host was suspended, or a failed scheduled refresh) | Medium - MQTT stays disconnected and remote commands unavailable until the next scheduled refresh, with only a debug log line explaining why |
 | 20 | `battery` sensor can stay stuck at 100% while `battery_residual`/`battery_capacity` reflect a real partial charge (`upstream/develop`) | Medium - confirmed independently by multiple users, but only affects a subset of EVs hit by this vendor data-quality bug | Medium - misleads the user's actual charge level and feeds bad data into anything relying on `battery`, no crash but the wrong state persists indefinitely |
 | 14 | `binary_sensor.preconditioning`'s `value_map` (`upstream/develop`) only checks the single-n "preconditioning" spelling | Medium-high (double-n is described as the more common spelling) | Low - the sensor just never updates from its restored/default state, no data loss |
 | 7 | `StellantisLastChargeSensor` can raise `KeyError` at the end of a charge | Low (needs `battery` reported `None` at the exact charge-start moment) | Low - crashes one non-critical sensor's update, self-contained |
@@ -39,15 +39,15 @@ Concrete, reachable leak: if that OTP-token-exchange request fails (any non-2xx)
 
 Fix sketch: `self.logger_filter.add_custom_value(otp_code)` right after each of the three places `otp_code` is obtained, mirroring the existing pattern for the other credentials.
 
-### 15. MQTT connection can loop forever refuse/reconnect for accounts not entitled to the event topic (`upstream/develop`)
+### 37. A refused MQTT connect never triggers the token refresh
 
-`stellantis.py:995-1006` (`_on_mqtt_connect`) and `stellantis.py:1008-1015` (`_on_mqtt_disconnect`).
+`stellantis.py:1077-1085` (`_on_mqtt_disconnect`) on `testing`, same code on `upstream/develop`.
 
-`_on_mqtt_connect` always subscribes to the per-vehicle event topic (`MQTT_EVENT_TOPIC + vin`) alongside the response topic, unconditionally. For an account whose Stellantis entitlement doesn't include that event topic, the broker refuses the *whole connection* (`MQTT_ERR_CONN_REFUSED`, result_code 5) instead of just failing that one topic's SUBACK. `_on_mqtt_disconnect` only handles `result_code == 11` (`MQTT_ERR_AUTH`); a `result_code == 5` disconnect is just debug-logged and otherwise ignored. paho-mqtt's own `loop_start()` background thread then auto-reconnects, re-subscribes to the same event topic, and gets refused again - an unbounded reconnect/refuse loop that never lets remote commands work for the affected account, with nothing above debug level in the logs to explain why.
+`_on_mqtt_disconnect` only refreshes the MQTT token on `result_code == 11` (`MQTT_ERR_AUTH`). paho never delivers that code: with the v1 callback API this integration uses, every refused CONNACK (codes 1-5, including 4 "bad username or password" and 5 "not authorized", i.e. an expired or revoked access token) is turned into `MQTT_ERR_CONN_REFUSED` (5) before `on_disconnect` runs. `MQTT_ERR_AUTH` only appears in paho's `error_string()`, no client code path returns it (checked against paho-mqtt 2.1). The refresh branch is dead code, and paho's reconnect loop keeps retrying with the same rejected token.
 
-Already fixed, but only on `local/changes` (commit `162ff1b` "Stop requesting the MQTT event topic after a connection refusal", not an ancestor of `upstream/develop`). The fix's own comment states it's based on real evidence, not a theoretical risk: *"MQTT_ERR_CONN_REFUSED: confirmed from logs to occur when the broker closes the whole connection instead of a per-topic SUBACK 0x80 because the account isn't entitled to the event topic."* No upstream GitHub issue number found for it (checked the commit, its comment, and searched upstream issues) - looks like it was diagnosed straight from local logs, not a filed report.
+Since `bugfix/mqtt-connect-result-code` (`b7e715b`), `_on_mqtt_connect` sees the real CONNACK code and returns early on a refusal, so that is the one place that still knows *why* the connection was refused; in `on_disconnect` it is already collapsed to 5.
 
-Fix sketch (as already implemented on `local/changes`): add a `self._mqtt_subscribe_to_event_topic` flag (default `True`), skip the event-topic subscription in `_on_mqtt_connect` when it's `False`, and set it to `False` in `_on_mqtt_disconnect` on `result_code == 5` so the next reconnect attempt only requests the response topic.
+Fix sketch: in `_on_mqtt_connect`, when `result_code` is 4 or 5, schedule `scheduled_mqtt_token_refresh(force=True)` the same way the dead branch does (`do_async(..., wait=False)`, paho network thread), guarded so a burst of refusals doesn't start several refreshes at once. Then drop the `result_code == 11` branch from `_on_mqtt_disconnect`. Worth reproducing first with an expired token and debug logging, to confirm the broker answers with CONNACK 4/5 and not some other code.
 
 ### 13. `get_programs()` only checks the double-n "preconditionning" API spelling (`upstream/develop`)
 
@@ -221,6 +221,10 @@ Fix sketch: swap `start_session()`'s `aiohttp.ClientSession()` for `async_get_cl
 Fix sketch: either pin an explicit upper bound (e.g. `paho-mqtt>=1.3,<2.0`) to match what the code actually speaks, or - the more future-proof option - pass `callback_api_version=mqtt.CallbackAPIVersion.VERSION1` explicitly to `mqtt.Client(...)` in `_connect_mqtt()` so the legacy signature keeps working even on a 2.x install, and widen the pin once that's verified.
 
 ## Done
+
+### 15. MQTT connection loops refuse/reconnect for accounts not entitled to the event topic - invalid
+
+Assumed that the broker refuses the whole connection (`MQTT_ERR_CONN_REFUSED`, 5) for an account not entitled to the per-vehicle event topic, and a fix briefly on `local/changes` stopped subscribing to that topic after a refusal. The diagnosis doesn't hold: a refusal comes from the CONNACK, before `_on_mqtt_connect` has sent any SUBSCRIBE, so the requested topics can't be its cause. A broker dropping the connection over a denied SUBSCRIBE would show up as a lost connection, not as a refused one, and a denied topic in the SUBACK (0x80) is already handled by `_on_mqtt_subscribe`. The refusals seen in the logs were most likely token related (CONNACK 4/5), see #37. That fix was dropped again, since it would have turned off the live updates for good after any refused connect.
 
 ### 8. Diagnostics crash when the config entry is not loaded
 
