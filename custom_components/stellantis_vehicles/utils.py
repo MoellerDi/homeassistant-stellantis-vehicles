@@ -12,7 +12,9 @@ from homeassistant.util import dt
 
 from .exceptions import RateLimitException
 from .const import (
-    FIELD_ANONYMIZE_LOGS
+    FIELD_ANONYMIZE_LOGS,
+    MQTT_RESP_DATA_ERROR_CODES,
+    MQTT_CHARGING_RESP_DATA_ERROR_CODES
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -58,6 +60,16 @@ def date_from_pt_string(pt_string, start_date=None):
     except Exception as e:
         _LOGGER.warning(str(e))
         return None
+
+def resolve_mqtt_resp_data_error(service:str | None, resp_data:dict[str, Any], default:str) -> str:
+    """ Failure reason from the resp_data of an MQTT command response, or default when it has none. """
+    if not service:
+        return default
+    error_fields = MQTT_CHARGING_RESP_DATA_ERROR_CODES if service.startswith("/VehCharge") else MQTT_RESP_DATA_ERROR_CODES.get(service, {})
+    for field, codes in error_fields.items():
+        if (error_code := resp_data.get(field)) is not None:
+            return codes.get(error_code, default)
+    return default
 
 def replace_string_placeholders(string, placeholders=None):
     if placeholders is None:
