@@ -281,6 +281,16 @@ The vehicle list's `_links` and the vendor apps point to several `connectedcar/v
 
 The 404s read as "no entries", not as "endpoint unknown" or "not entitled": the endpoints exist and the account may call them. `alerts`/`alarms`/`collisions` might fill after a real event (e.g. a triggered anti-theft alarm); worth one more look if that happens, otherwise there is nothing to build on. `telemetry` is presumably a fleet/B2B feature. The `_links` also list `callbacks`, `.../callbacks/{cbid}/remotes` and `.../callbacks/{cbid}/monitors`, the push-subscription model the MyCitroën app uses (REST remote commands only for X250-platform vehicles, everything else via MQTT); not useful for HA without a public URL.
 
+## To check (needs the vehicle or an event)
+
+### 42. Check `profile=endUser` on `/status` and `/maintenance`
+
+The third-party MyStellantis app always sends `profile=endUser` on `status`, `maintenance`, `alerts` and `alarms`; the integration sends it nowhere. On `alerts`, `alarms`, `collisions`, `telemetry` and `lastPosition` it changed nothing (#41), but `/status` and `/maintenance` were not tried. Compare the raw `/status` payload with and without the parameter (extra or missing fields, a different `energies` block); worth a temporary debug action again, since the production request must stay unchanged until there is a reason.
+
+### 43. Query `alerts` and `alarms` after a real event
+
+Both answered `404` 40400 "no entries" on 2026-10-02 (#41). The endpoints exist, so they may fill after an actual event, e.g. a triggered anti-theft alarm, and the response shape is still unknown. After such an event, query them again (plain and with MyCitroën's filter `pageSize=60&type=vehicle.alarm.trigger`) and decide whether they are worth an entity or event; until then there is nothing to build on.
+
 ## Done
 
 ### 15. MQTT connection loops refuse/reconnect for accounts not entitled to the event topic - invalid
