@@ -18,6 +18,7 @@ Open items are sorted by priority: a rough combination of how likely the trigger
 | 14 | `binary_sensor.preconditioning`'s `value_map` (`upstream/develop`) only checks the single-n "preconditioning" spelling | Medium-high (double-n is described as the more common spelling) | Low - the sensor just never updates from its restored/default state, no data loss |
 | 7 | `StellantisLastChargeSensor` can raise `KeyError` at the end of a charge | Low (needs `battery` reported `None` at the exact charge-start moment) | Low - crashes one non-critical sensor's update, self-contained |
 | 21 | `send_abrp_data` logs an undeduplicated warning on every failed ABRP push (`upstream/develop`) | High for anyone with a stale/invalid ABRP API key - fires on every poll, confirmed at 82 occurrences in ~80 minutes in one report | Very low - opt-in feature (needs the user's own ABRP key configured), no functional breakage, purely log noise |
+| 40 | The trips endpoint ignores all filters once a `pageToken` is sent, so every page after the first is wrong; `get_vehicle_last_trip` follows `last` anyway | Very low today - needs more than 60 trips in the 24 h window; real windows had at most 7 | Medium if hit - a wrong "last trip"; blocks any future trip-history import that pages |
 
 ### 24. `otp/otp.py` logs through a logger the `SENSITIVE_DATA_FILTER` was never attached to
 
@@ -109,6 +110,19 @@ Fix sketch: guard with `if "initial_percentage" in attributes and "final_percent
 `stellantis.py:1167-1176` (`send_abrp_data`). Both failure paths - a non-`"ok"` ABRP response and an exception from `make_http_request` - call `_LOGGER.warning` unconditionally on every call, with no "log once until it recovers" guard like the one already used elsewhere in the codebase (e.g. the `_unavailable_logged` pattern, or the `_maintenance_unsupported` one-shot flag added for [issue #623](https://github.com/andreadegiovine/homeassistant-stellantis-vehicles/issues/623)'s Maintenance-404 flood). Since this runs on every coordinator poll, a persistently wrong/expired ABRP API key floods the log at the same cadence - confirmed in [issue #505](https://github.com/andreadegiovine/homeassistant-stellantis-vehicles/issues/505): 82 identical `401` warnings in about 80 minutes. That issue was auto-closed by the stale-bot in 2026-07 for inactivity ("not planned"), not because of a fix - the code path is unchanged, re-verified on `upstream/develop`.
 
 Fix sketch: add a per-instance one-shot flag (e.g. `self._abrp_error_logged`), set it and log at `warning` the first time a call fails, downgrade subsequent consecutive failures to `debug`, and reset/log a recovery message once a call succeeds again - same shape as the existing unavailability-logging pattern.
+
+### 40. The trips endpoint ignores all filters once a `pageToken` is sent
+
+`GET connectedcar/v4/user/vehicles/{id}/trips`, used by `get_vehicle_last_trip` (`stellantis.py:805-821`, `upstream/develop`). A server-side bug, not one in this integration, but the integration relies on the broken part.
+
+Measured on `testing` with the temporary `debug_fetch_trips_paging` action against the fork maintainer's vehicle (2026-10-02, Graylog):
+- Default page size is 60. Pages carry `total`, `totalPage`, `currentPage` and `_links` `first`/`self`/`prev`/`next`/`last`. Within a page trips are sorted oldest first.
+- Page 1 always honours `timestamps={from}/` and `distance=0.1-`. Every follow-up page does not: page 2 started with the same trip (2026-08-17 11:36) in four runs with different windows. With a 30-day window (`total` 87) page 2 returned 27 trips from 08-17 to 08-26, all before the window, and the 27 newest in-window trips (09-23 to 10-02) were never returned. With a 60-day window (`total` 190) page 2 repeated the last 8 trips of page 1 and the 8 newest trips were missing. `total`/`totalPage` stay those of the filtered query, the content does not.
+- Same result whether the `next` href is followed as-is (the vendor MyCitroën app's `TICRepository` does this) or the filtered URL is sent again with only the `pageToken` added (what `get_vehicle_last_trip` does). The token apparently points at a fixed offset in some default list and overrides the query.
+
+Impact today: `get_vehicle_last_trip` asks for the last 24 h and then follows `last`; with more than one page that `last` page holds unrelated trips, so `trips[-1]` would be a wrong "last trip". Not reached in practice (at most 7 trips per 24 h window in the logs, far below 60). Any future feature that imports trip history by paging (the commented-out `get_vehicle_trips` caller in `base.py`) would silently get wrong and missing trips.
+
+Fix sketch: in `get_vehicle_last_trip`, use only page 1 and log a warning when `totalPage > 1` instead of following `last`. For history, never page: query consecutive time windows small enough to stay under one page and dedupe by trip `id`. Still to verify with the same debug action before relying on it: whether a closed range `timestamps={from}/{to}` works, and whether `pageSize` above 60 is accepted (which would make paging unnecessary for realistic windows).
 
 ## Improvement ideas (not bugs, architecture/maintainability notes)
 
