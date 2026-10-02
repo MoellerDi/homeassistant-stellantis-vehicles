@@ -47,6 +47,8 @@ Fix sketch: `self.logger_filter.add_custom_value(otp_code)` right after each of 
 
 Confirmed on the fork maintainer's account (Graylog, 2026-10-02): the list holds 16 associations, all for the same vehicle and customer (one per service bundle, from five pairings between 2023-12 and 2026-04, old ones are never removed). The VIN and customer only show masked because they repeat entry 0's values. In clear: the other 15 `car_association_id`s and every entry's `notification_url`, a `workflows.pm.fcagroup.com/cvs/callback?taskToken=...` URL. What that callback token permits is not known; it belongs to the association workflow, so it is treated as a secret here. On an account with more than one vehicle the other vehicles' `vehicle` (VIN) values would presumably be in clear too (not verified, the maintainer's account has one vehicle).
 
+Related gap, seen 2026-10-02 with the temporary `debug_fetch_vehicle_endpoints` action (see #41): `GET connectedcar/v4/user` returns `email`, `firstName` and `lastName`, and all three were logged in clear although "Anonymize personal data on logs" was on. Names are never registered with the filter, and the email only during the login in the config flow (`stellantis.py:376`), so after a restart it is unknown to the filter too. No production code path calls `/user` today, so this only matters if it is ever used; then add `email`, `firstName`, `lastName` to `SensitiveDataFilter.REDACT_KEYS` (`utils.py:197`).
+
 Fix sketch: register `customer`, `vehicle`, `car_association_id` and `notification_url` (or its `taskToken` query value) for every entry of the list, not just the first. Alternatively add `notification_url` to `SensitiveDataFilter.REDACT_KEYS` (`utils.py:197`, the keys redacted wherever they appear in a logged payload, like `lastPosition`), which would also cover the details endpoint (`/car-associations/{id}/details`) if that is ever used; the ids would still need the per-entry registration.
 
 ### 37. A refused MQTT connect never triggers the token refresh
@@ -262,6 +264,22 @@ Not a confirmed bug, no reproduction against the real Stellantis backend from th
 Idea, as an opt-in alternative rather than a replacement: add `use_pkce` per brand in `configs.json` (default unset/false, so no existing brand's behavior changes), generate a `code_verifier`/`code_challenge` (S256) pair when `use_pkce` is true and add `code_challenge`/`code_challenge_method` to the authorize URL, and branch `get_access_token()`/`refresh_oauth_token_request()` between today's Basic-Auth headers and a PKCE variant that sends `client_id`+`code_verifier` (and, for refresh, `client_id`) with no `Authorization` header. Needs new, separate `const.py` entries (`OAUTH_AUTHORIZE_PKCE_QUERY_PARAMS`, `OAUTH_GET_TOKEN_PKCE_QUERY_PARAMS`, `OAUTH_TOKEN_PKCE_HEADERS`, `OAUTH_REFRESH_TOKEN_PKCE_QUERY_PARAMS`) rather than changing the existing ones, plus a migration concern for the new `use_pkce` config field on existing installs.
 
 Deliberately not pursued now: this touches the auth path with no automated test coverage (#29) and a real risk of locking users out if PKCE turns out not to actually be accepted the way the third-party app's code implies - there's no evidence today's secret-based flow for Opel/Vauxhall is broken, so this would only be trading a working path for an unverified one. Worth revisiting if Stellantis ever rotates/invalidates one of those two brands' secrets and the existing flow actually breaks, not preemptively.
+
+### 41. The unused vehicle sub-endpoints hold nothing the integration lacks (checked 2026-10-02)
+
+The vehicle list's `_links` and the vendor apps point to several `connectedcar/v4/user` endpoints the integration never calls. All were queried with the temporary `debug_fetch_vehicle_endpoints` action on `testing` (since removed) against the fork maintainer's vehicle, same headers as `/status`, three runs: plain, with `profile=endUser` (the third-party MyStellantis app always sends it on `status`/`maintenance`/`alerts`/`alarms`), and with MyCitroën's alarm filter `pageSize=60&type=vehicle.alarm.trigger`. The parameters changed nothing.
+
+| Endpoint | Response |
+|---|---|
+| `vehicles/{id}/alerts` | `404 {"code": 40400, "message": "Not Found: No alert was found."}` |
+| `vehicles/{id}/alarms` | `404` 40400 "No Alarm was found for this vehicle" |
+| `vehicles/{id}/collisions` | `404` 40400 "No collisions found for this vehicle." |
+| `vehicles/{id}/telemetry` | `404` 40400 "Telemetries not found" |
+| `vehicles/{id}/lastPosition` | GeoJSON `Feature`: the position `/status` already has, plus `properties.signalQuality` (9) and `fixStatus` ("3D") |
+| `vehicles/{id}` (`self`) | the vehicle list entry again: `id`, `vin`, `motorization`, `brand`, `pictures`, `_links` |
+| `user` | `email`, `firstName`, `lastName` and the vehicle list under `_embedded` (logging gap, see #39) |
+
+The 404s read as "no entries", not as "endpoint unknown" or "not entitled": the endpoints exist and the account may call them. `alerts`/`alarms`/`collisions` might fill after a real event (e.g. a triggered anti-theft alarm); worth one more look if that happens, otherwise there is nothing to build on. `telemetry` is presumably a fleet/B2B feature. The `_links` also list `callbacks`, `.../callbacks/{cbid}/remotes` and `.../callbacks/{cbid}/monitors`, the push-subscription model the MyCitroën app uses (REST remote commands only for X250-platform vehicles, everything else via MQTT); not useful for HA without a public URL.
 
 ## Done
 
