@@ -186,4 +186,7 @@ def _coordinator_diagnostics(
         "mqtt_state": _scrub_substrings(
             async_redact_data(coordinator.mqtt_state, TO_REDACT), secrets
         ),
+        # Keyed by "fds" code; holds only service names and MQTT service
+        # groups, nothing that needs redacting.
+        "supported_features": coordinator.supported_features,
     }
