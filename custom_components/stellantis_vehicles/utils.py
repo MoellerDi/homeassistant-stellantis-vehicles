@@ -104,6 +104,9 @@ def preconditioning_program_time(program):
         return None
     return time(hour, minute)
 
+def vehicle_removed_issue_id(vin:str) -> str:
+    return f"vehicle_removed_{vin}"
+
 def replace_string_placeholders(string, placeholders=None):
     if placeholders is None:
         placeholders = {}
