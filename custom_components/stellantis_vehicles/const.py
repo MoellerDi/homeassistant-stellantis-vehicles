@@ -40,6 +40,11 @@ CAR_API_BASE_URL = API_BASE_URL + "/connectedcar/v4/user"
 CAR_API_VEHICLES_URL = CAR_API_BASE_URL + "/vehicles"
 CAR_API_GET_VEHICLE_STATUS_URL = CAR_API_VEHICLES_URL + "/{#vehicle_id#}/status"
 CAR_API_GET_VEHICLE_TRIPS_URL = CAR_API_VEHICLES_URL + "/{#vehicle_id#}/trips"
+# The remote services this vehicle's subscription covers, each with its "fds"
+# feature code and official name (what the vendor app's forFDS(vin) calls).
+GET_VEHICLE_RIGHTS_URL = API_BASE_URL + "/applications/cvs/v4/rights/vehicle/{#vin#}"
+
+SUPPORTED_FEATURES_RETRY_DELAYS = (30, 120, 600)
 
 MQTT_SERVER = "mwa.mpsa.com"
 MQTT_PORT = 8885
