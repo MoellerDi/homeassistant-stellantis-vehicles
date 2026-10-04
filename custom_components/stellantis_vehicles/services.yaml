@@ -1,0 +1,55 @@
+set_preconditioning_program:
+  name: Set preconditioning program
+  description: >-
+    Writes one of the four preconditioning program slots of a vehicle. Fields left
+    empty keep the value currently stored in the vehicle. The command is refused
+    while preconditioning is running.
+  fields:
+    device_id:
+      name: Vehicle
+      description: Vehicle to write the program to.
+      required: true
+      selector:
+        device:
+          integration: stellantis_vehicles
+          multiple: true
+    slot:
+      name: Slot
+      description: Program slot to write, 1 to 4. The slots are the same ones shown in the vehicle app.
+      required: true
+      example: 1
+      selector:
+        number:
+          min: 1
+          max: 4
+          mode: box
+    days:
+      name: Days
+      description: Days the program runs on. Send an empty list to clear all days.
+      example: '["Mon", "Fri"]'
+      selector:
+        select:
+          multiple: true
+          options:
+            - Mon
+            - Tue
+            - Wed
+            - Thu
+            - Fri
+            - Sat
+            - Sun
+    time:
+      name: Time
+      description: >-
+        Time the vehicle should be ready. Preconditioning starts before this time,
+        the vehicle decides how long in advance. Setting a time that is closer than
+        that starts preconditioning right away.
+      example: "07:30:00"
+      selector:
+        time:
+    enabled:
+      name: Enabled
+      description: Whether the program is active. A program can only be enabled once it has a time and at least one day.
+      example: true
+      selector:
+        boolean:
