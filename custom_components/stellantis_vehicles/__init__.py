@@ -43,8 +43,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     async_setup_services(hass)
     return True
 
-async def async_setup_entry(hass: HomeAssistant, config: ConfigEntry) -> bool:
 
+async def async_setup_entry(hass: HomeAssistant, config: ConfigEntry) -> bool:
 
     stellantis = StellantisVehicles(hass)
     stellantis.save_config(config.data)
