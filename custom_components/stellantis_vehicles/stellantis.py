@@ -491,6 +491,7 @@ class StellantisOauth(StellantisBase):
         if otp_code is None:
             _LOGGER.error("OTP code is empty, please reauthenticate")
             raise ConfigEntryAuthFailed("OTP code is empty, please reauthenticate")
+        self.logger_filter.add_custom_value(otp_code)
         # Save updated OTP object to file
         await self._hass.async_add_executor_job(save_otp, self.otp, otp_file_path)
         return otp_code
