@@ -38,21 +38,27 @@ Don't hard-wrap Markdown prose — one paragraph or list item per line, relying 
 
 | Branch | Purpose |
 |---|---|
-| `testing` | Primary branch — new contributions are tried here first. Never a base for new branches. |
-| `local/changes` | Changes the user does **not** want upstream. Synced to `origin` only, never `upstream`. Merges into `testing`, except this `CLAUDE.md`, which is dropped from every such merge. |
+| `testing` | Installed on the user's HA instance to try new features and bugfixes, which are developed in separate branches. Never a base for new branches. |
+| `local/changes` | Changes the user does **not** want upstream. Synced to `origin` only, never `upstream`. Permanently part of `testing` (merged in on every rebuild), except this `CLAUDE.md`, which is dropped from every such merge. |
 | `develop` | Tracks `upstream/develop`. The base for upstream-PR branches. |
 | `master` | Tracks releases. |
 
 - **Remotes**: `origin` = this fork (`MoellerDi/homeassistant-stellantis-vehicles`, the only push target), `upstream` = original author (`andreadegiovine/...`, read-only, never push there). Check `git remote -v` before assuming where a branch or PR lives. `push.autoSetupRemote` is set globally, so push new branches to `origin` explicitly. If a branch tracks `upstream/...` by mistake: `git branch --set-upstream-to=origin/<branch> <branch>`.
 - **Don't merge branches into `testing` or `develop` unless asked.**
-- **Upstream-PR branches**: branch off `upstream/develop`, not `testing` — `testing`-only commits would ride along and pollute the PR diff. When work on `testing` is ready it gets consolidated onto its own prefixed branch, which is then used to open the PR. Ask if the correct base is unclear.
+- **Branch prefixes**: purpose prefix + short, lower-case, hyphen-separated description (e.g. `feature/add-user-profile`). `bugfix/…` / `feature/…` (also `hotfix/`, `refactor/`, `doc/`) = development with PR intent, becomes the PR when finished. `*-not-ready-yet/…` (e.g. `bugfix-not-ready-yet/…`) = development paused, may be resumed later; rename to `bugfix/` / `feature/` once work continues and a PR is planned soon. `investigation/…` = analysis without PR intent. `backup/…` = local safety copy before history rewrites. Each code branch may have a local-only `<branch>-tests` sibling (see Tests).
+- **Workflow**: new work starts as a branch off `upstream/develop`. To try it on the HA instance, the user has it merged into `testing` (only when asked). Before the PR, Claude cleans up the branch history (rebase/squash) when asked. Once the PR is open, only add new commits so reviewers can follow the history; a force-push is an exception only: point out this rule and ask again whether the change should go into the PR via force-push. After the PR is merged upstream, delete the branch locally and on `origin`, together with its `-tests` sibling. `-tests` branches never get merged into `testing`.
+- **Rebuilding `testing`**: the user requests it from time to time (e.g. after `develop` moved or a PR was merged). Claude may suggest it when it makes sense, but never starts it without asking. Steps:
+  1. Check the old `testing` for commits that exist nowhere else and point them out; the user decides which branch they get cherry-picked onto before the rebuild, otherwise they are lost.
+  2. Archive the old one as `archiv/testing_<YYYYMMDD>` (creating it locally is fine, but ask before pushing it to `origin`).
+  3. Build the new `testing` from `develop` plus the active branches: all not-yet-merged `bugfix/`, `feature/`, `hotfix/`, `refactor/` branches, but not `*-tests` and not `*-not-ready-yet/`. Ask when in doubt.
+  4. Merge `local/changes` last (minus `CLAUDE.md` and `PR-Info.md`), because it contains changes that must be applied on top of everything else.
+  5. Resolve merge conflicts yourself and summarize them afterwards; on contradictions or logic conflicts between branches, ask first.
+  6. Publishing the new `testing` to `origin` needs `--force-with-lease`: ask first, with a summary, and never push without the user's go-ahead.
+- **Upstream-PR branches**: features and bugfixes are developed in their own branches off `upstream/develop`, not `testing` — `testing`-only commits would ride along and pollute the PR diff. `testing` only collects them for trying on the user's HA instance. Occasional quick-fixes committed directly on `testing` get cherry-picked onto a separate branch (or into an existing one) for the PR, only when asked. Ask if the correct base is unclear.
 - **`PR-Info.md`**: a per-branch "remove before opening PR" scratch note. Must never land on `testing` — when a merge brings it along, `git rm PR-Info.md` as part of that merge or in a follow-up commit. Leave it untouched on the branch it came from. Don't use em-dashes (—) in its prose; use a comma, colon, semicolon, or parentheses instead.
+- **PR / issue tracking**: on every new PR or issue, and when one is merged or closed, update the Claude memory: one minimal status line in `stellantis-pr-status`, details (causes, commits, review drafts) in `stellantis-pr-archive`. Not in this file.
 - **`CLAUDE.md`** (this file): see the note at the top of this file — dropped from the `local/changes` → `testing` merge exactly like `PR-Info.md` above.
-- **`README.md` / `info.md`** are kept in sync (`render_readme: true` in `hacs.json`); an `update_readme.yaml` workflow may regenerate parts of `README.md`. Don't hand-edit generated sections without checking that workflow first.
-
-## Branch naming
-
-Purpose prefix + short, lower-case, hyphen-separated description: `feature/`, `bugfix/`, `hotfix/`, `refactor/`, `doc/`. E.g. `feature/add-user-profile`.
+- **`README.md`** can be edited, but the `update_readme.yaml` workflow overwrites parts of it (support section, active installations badge), so check the workflow first.
 
 ## Releases
 
