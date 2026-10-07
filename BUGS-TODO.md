@@ -10,6 +10,8 @@ Open items are sorted by priority: a rough combination of how likely the trigger
 |---|-----|-----------|--------|
 | 13 | `get_programs()` (`upstream/develop`) only checks the double-n "preconditionning" API spelling | Subset of vehicles (those reporting the single-n spelling), but certain for them, every time | High - silently erases the vehicle's real preconditioning schedule when start/stop is pressed |
 | 44 | A denied event topic (SUBACK `0x80`) makes `_on_mqtt_subscribe` reconnect MQTT every 300 s, forever (`upstream/develop`) | Unknown - needs an account not entitled to `MQTT_EVENT_TOPIC`, not seen in our logs; becomes relevant once the event topic is actually used (PR #650) | Medium-high for affected accounts - the command connection drops and comes back every 5 minutes for good, with a WARNING each time |
+| 48 | `async_remove_entry` removes other config entries that are not `LOADED` (setup retry, reauth) and leaves the removed entry's own OTP file and images behind when another entry exists | Low - needs two entries, one of them not loaded at the moment the other is deleted (setup retry and reauth are not rare for a cloud API) | High - the other account's whole configuration is deleted (tokens, per-vehicle settings; remote commands then need a new SMS code and PIN) |
+| 47 | OTP file and image folder are keyed by `customer_id`, so config entries of the same account (multi-brand, upstream issue #601) share one OTP state | Unknown - needs two entries with the same customer_id and remote commands on, not reproduced; waiting for a follow-up in upstream issue #601 | Medium-high if hit - the shared device state goes stale in one entry, remote commands then fail and get disabled (see #19) |
 | 4 | `_auto_stop_charge_at_limit` can crash with `AttributeError`/`TypeError` | Low-medium (narrow first-poll timing window) | Medium - that vehicle's coordinator update crashes, entities briefly unavailable, self-recovers |
 | 20 | `battery` sensor can stay stuck at 100% while `battery_residual`/`battery_capacity` reflect a real partial charge (`upstream/develop`) | Medium - confirmed independently by multiple users, but only affects a subset of EVs hit by this vendor data-quality bug | Medium - misleads the user's actual charge level and feeds bad data into anything relying on `battery`, no crash but the wrong state persists indefinitely |
 | 14 | `binary_sensor.preconditioning`'s `value_map` (`upstream/develop`) only checks the single-n "preconditioning" spelling | Medium-high (double-n is described as the more common spelling) | Low - the sensor just never updates from its restored/default state, no data loss |
@@ -41,6 +43,42 @@ Upstream only subscribes to the event topic and drops its messages, so the cost 
 
 Fix sketch: since PR #667, `_on_mqtt_subscribe` knows the topic of the SUBACK (`self._mqtt_subscriptions`). Only reconnect when the response topic is denied. For a denied event topic, log one WARNING naming the topic and skip it on later connects for this session (an in-memory flag reset on reload, not a stored option), so commands keep working and the live updates fall back to REST polling.
 
+### 48. `async_remove_entry` removes other config entries that are not `LOADED`, and skips the removed entry's own files when another entry exists
+
+Fixed on the local branch `bugfix/remove-entry-keeps-other-entries` (from `upstream/develop`, 5 commits that are to be squashed before a PR, plus the local-only `bugfix/remove-entry-keeps-other-entries-tests` with 13 tests). Not pushed, no PR yet, not in `testing` (taken out again on 2026-10-07 at the user's request).
+
+`__init__.py`, `async_remove_entry`. The "is this the last entry" check used `hass.config_entries.async_loaded_entries(DOMAIN)`, which only returns entries in state `LOADED`. An account in `SETUP_RETRY` (Stellantis outage) or `SETUP_ERROR` (waiting for reauth) counted as gone, so the block below it removed it together with the deleted entry (loop "Remove any remaining disabled or ignored entries", introduced in `4b85f92`, 2025-05-09, no recorded rationale). The same block also removed the JS card URL, and it was the only place that cleaned up the deleted entry's own OTP file and image folder, so deleting entry A while entry B existed left A's files behind for good (`customer_id` of A is never seen again).
+
+Decisions on the branch:
+- Any other entry that is not ignored counts as remaining, a disabled one included (it keeps its configuration and can be enabled again). Only then the card URL is removed.
+- Nobody else is removed any more, ignored entries included (this integration has no discovery, so they hardly exist).
+- The OTP file is kept while another entry has the same `customer_id`, otherwise it is deleted (the file cannot be recreated without a new SMS code). See #47 for why sharing can happen at all.
+- Pictures are deleted per VIN of the removed entry's devices (the VINs are already collected for the repair issues). The image folder goes with its leftovers when the account is not shared, otherwise only once it is empty. `shutil.rmtree` stays, always behind an emptiness or "not shared" check.
+- A missing `customer_id` no longer crashes the cleanup (`.replace(...)` with `None`).
+
+Known leftovers, not fixed: the static path of the card stays registered and the card URL is only added in `async_setup`, so after deleting the last entry and adding a new one the card is missing until the next restart. A VIN that appears under two entries of one account loses its picture for both until the next reload.
+
+### 47. OTP file and image folder are keyed by `customer_id`, so config entries of the same account share one OTP state
+
+Status 2026-10-07: not reproduced, no change planned. Waiting for a follow-up in upstream issue #601 or a new ticket from its reporter (ac-uy). Verified by reading the code only, nothing was checked against the Stellantis/InWebo side.
+
+Where: `OTP_FILENAME = "{#customer_id#}_otp.pickle"` (`const.py`) gives `.storage/stellantis_vehicles/<customer_id>_otp.pickle`. The path is built in `get_otp_code` (`stellantis.py`) and in `async_remove_entry` (`__init__.py`). Pictures live in `www/stellantis_vehicles/<customer_id>/<vin>.png`.
+
+How entries end up sharing it: since `f360215` (2026-09-13, issue #601) the unique_id is `<customer_id>_<mobile_app>_<country_code>`, so a MyCitroën and a MyPeugeot entry of one login can coexist. The reporter confirmed both load on 2026.9.4 and 2026.10.1-beta.1. That Stellantis returns the same `customer` for both brand apps is not verified (the issue itself says so), but the rejected second setup that motivated the change points that way. Entries created without remote commands get a synthetic `MN-<uuid>` id and are never shared; older entries can carry a real customer_id even with remote commands off.
+
+What the file holds: a pickled `Otp` object with the InWebo device state (`device_id` = first 16 characters of the OAuth access token at activation time, a random `iwalea`, and the `IWData` keys). Every code generation runs `IWData.synchro`, which replaces `iwK0`/`iwK1` (`iwK1` as a hash chain with `dK1`), and then the whole object is pickled back. The runtime loads the file once (`self.otp is None`) and keeps the object in memory afterwards.
+
+Failure mode, derived from the code and not observed:
+1. The second entry's SMS activation registers a new InWebo device and overwrites the first entry's file (no check for an existing file). The first device stays registered at InWebo and counts towards `NOK:MAXNBTOOLS`.
+2. Until the next restart both entries keep their own in-memory copy and overwrite the file at each code generation (about every 3 days, the MQTT refresh token lives 3 days).
+3. After a restart both load the last written state, so two copies of one device advance independently. Because of the hash chain the stale copy is probably rejected by the server (`invalid_grant`, `ConfigException`, "OTP code is empty"), which is exactly the failure class that disables remote commands (see #19).
+
+Upstream issue #601 itself suggested namespacing OTP and picture storage per config entry; the shipped change only touched the unique_id. Our removal fix (#48) keeps the OTP file while another entry shares the `customer_id`, but that only covers the delete side.
+
+Fix direction: key the OTP file by `entry_id`. Not trivial: the migration has to give the second entry its own device (a new SMS code and PIN), two entries must never copy one device. The pictures could follow, but they are regenerable and of little value; if both contexts expose the same VIN, #601 asks for one deterministic owner.
+
+To verify once there is data: two entries of one account with remote commands on. Compare the first 5 characters of both `customer_id`s, the mtime of the pickle against the refresh times, and look in Graylog for `invalid_grant` or `OTP` messages around restarts.
+
 ### 4. `_auto_stop_charge_at_limit` can crash with `AttributeError`/`TypeError`
 
 `base.py:583-602` (`_auto_stop_charge_at_limit`) calling into `base.py:389-396` (`send_charge_command`).
@@ -50,6 +88,10 @@ Fix sketch: since PR #667, `_on_mqtt_subscribe` knows the topic of the SUBACK (`
 A second, narrower trigger in the same function: `base.py:598`, `int(float(self._sensors.get("battery"))) < int(charge_limit)`, assumes `"battery"` is never `None` once the key is present in `self._sensors`. `get_value()` (`base.py`, around the `_coordinator._sensors[key] = value` assignment) only skips overwriting an existing entry when the *new* reading is `None`, so the key can hold `None` if the very first status response after startup had `battery_charging == "InProgress"` but no `battery` field yet - `float(None)` then raises `TypeError`.
 
 Fix sketch: same `None` guard as the button's `available` check, before calling `send_charge_command` from `_auto_stop_charge_at_limit`; add an equivalent guard for `self._sensors.get("battery") is None` right next to the existing `charge_limit_on and charge_limit and "battery" in self._sensors` check. There's a stale, unmerged branch `bugfix-not-ready-yet/charge-command-missing-start-time` that touches the same area but predates the preconditioning-programs refactor and doesn't cover either of these call sites - needs a fresh implementation, not a rebase.
+
+Update 2026-10-07: fixed on the local branch `bugfix/auto-stop-charge-limit-errors` (commit `a0ff086`, plus the local-only `-tests` branch with 5 tests), stage A only. Both `None` cases are guarded (battery, charging start time) and the send is wrapped in `try/except (HomeAssistantError, CommunicationError)`: a failure is logged as a warning, the flag stays `False` and the next poll retries instead of failing the whole update and discarding the fresh data. Not pushed, no PR yet, not in `testing` (taken out again on 2026-10-07). The stale branch `bugfix-not-ready-yet/charge-command-missing-start-time` (last commit `412a3d2`, tests `d73cfa8` were local only) is deleted locally and on `origin` (the first `git push --delete` failed twice with HTTP 500, the API with 403, a later retry on 2026-10-07 went through).
+
+Still open, deliberately not part of stage A: (B) the check reads `self._sensors`, which the entities only fill after the coordinator update, so it works with the previous cycle's battery level (harmless for AC, a few percent on DC, up to an hour with a long `number_refresh_interval`); (C) `send_command` returns normally after `ConfigEntryAuthFailed` or when the publish returned `None`, so the auto stop sets `_manage_charge_limit_sent` although nothing was sent, and a later failed command result never resets it.
 
 ### 20. `battery` sensor can stay stuck at 100% while `battery_residual`/`battery_capacity` reflect a real partial charge (`upstream/develop`)
 
@@ -191,6 +233,10 @@ Fix sketch:
 - Reset `self._mqtt_otp_retry = 0` on the success path too (next to the existing `self._mqtt_token_retry = 0`).
 - Keep the two `except` blocks separate (don't merge them into one), since only `ConfigEntryAuthFailed`'s give-up branch starts HA's reauth flow - `ConfigException`'s doesn't and shouldn't gain that side effect.
 
+Update 2026-10-07: parked as `bugfix-not-ready-yet/mqtt-otp-retry-limit` (+ `-tests`), rebased onto `upstream/develop` `7f75d7d` as `7cb9015` (tests `8de05a8`); `origin` still has the old `5fe60e3`, so a push would need a force. Not in `testing` any more. Reason: Graylog 2026-08-25 to 2026-10-07 (one instance) has no hit for "MQTT authentication failed", "MQTT authentication error", "OTP code is empty", "OTP file", "Can't get otp code" or "ConfigException", so neither the old instant disable nor the retry ever fired. The only related events are 8 incidents (08-28 twice, 09-09, 09-16, 09-19, 09-28 three times, 10-01) of `400 invalid_grant` on the OTP password grant, every one absorbed by the refresh-token fallback in `refresh_mqtt_token_request`. The "confirmed reachable" above is a code path, not an observed event. Issues #638 and #618 (remote commands vanish) are other users' logs and unconfirmed as coming from this path.
+
+On this path `ConfigEntryAuthFailed` comes from three places: the OTP file is missing (permanent, a retry only burns OTP budget), the OTP code is empty (the server answered something other than OK, maybe transient) and `invalid_grant` on the password grant (ambiguous: a rejected code or a revoked device). The give-up branch starts a reauth, which only renews the OAuth token and does not repair OTP; the real remedy is the `reconfigure_otp` notification (reconfigure with SMS code and PIN). If this is revived: give up at once on a missing OTP file, keep a bounded retry only for the plausibly transient cases and say so in the PR text. Next step offered: read the debug log attached to upstream issue #618 to see which exception actually disabled remote commands there.
+
 ### 22. `KWH_CORRECTION = 1.343` is a single global magic number applied to every vehicle
 
 `const.py:52` (`KWH_CORRECTION`), used in `base.py`'s `get_value()` (`battery_capacity`/`battery_residual`, gated by `switch_battery_values_correction`) and in `sensor.py`'s `StellantisLastTripSensor` (electric consumption/avg-consumption divisor). The same fixed ratio is applied regardless of vehicle model or battery pack size, even though the underlying vendor data-quality issue it corrects for (see [issue #272](https://github.com/andreadegiovine/homeassistant-stellantis-vehicles/issues/272), and the related #20 above) plausibly varies by e-CMP platform variant/battery capacity.
@@ -304,6 +350,10 @@ The third-party MyStellantis app always sends `profile=endUser` on `status`, `ma
 ### 43. Query `alerts` and `alarms` after a real event
 
 Both answered `404` 40400 "no entries" on 2026-10-02 (#41). The endpoints exist, so they may fill after an actual event, e.g. a triggered anti-theft alarm, and the response shape is still unknown. After such an event, query them again (plain and with MyCitroën's filter `pageSize=60&type=vehicle.alarm.trigger`) and decide whether they are worth an entity or event; until then there is nothing to build on.
+
+### 49. After a rejected OTP password grant every refresh cycle may try OTP again
+
+Seen in Graylog on 2026-09-28: three fallbacks in a row, 19:24, 19:36 and 19:48 UTC, 12 minutes apart, each with a freshly generated OTP code (`otp code: ...`) followed by `400 invalid_grant` and a normal reschedule. Hypothesis, not verified: the refresh-token-only answer carries no new `refresh_token`, so `refresh_token_expires_at` is not updated, `refresh_token_almost_expired` in `refresh_mqtt_token_request` stays true and every refresh (the MQTT access token lives about 15 minutes) generates another OTP code until one password grant succeeds. At worst that is about 5 codes per hour out of the 6 per day budget (`@rate_limit(6, 86400)`, and the server side seems to have a similar limit). It stopped after three here. OTP use is otherwise 1 to 4 codes on 14 of 44 days, matching the 3 day refresh token. To check: the keys of the fallback response (masked in the logs, so look at the code path and a debug run) and whether a failed password grant should back off to the next scheduled day instead of the next refresh.
 
 ## Done
 
@@ -452,3 +502,5 @@ Re-checked 2026-09-24: PR still open (not yet merged), no new maintainer feedbac
 ### 12. `@rate_limit` shares its call budget across all instances
 
 `utils.py:168-186`. Already known before this review; unmerged branch `bugfix-not-ready-yet/rate-limit-shared-across-instances` (+ `-tests`) has a fix scoping the budget per instance via a `WeakKeyDictionary`, but hasn't landed in `testing` yet.
+
+Update 2026-10-07: upstream PR #672 (comoser, open) covers the same ground (per-owner windows via `args[0]`, weak-keyed, plus a per-instance lock that serialises the OAuth refresh and skips a refresh when the token was already rotated). Keep our branch only as a fallback; the OTP counter still does not survive a restart in either version.
