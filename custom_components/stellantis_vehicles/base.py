@@ -18,7 +18,7 @@ from homeassistant.components.time import TimeEntity
 from homeassistant.core import callback, HomeAssistant
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.const import ( STATE_UNAVAILABLE, STATE_UNKNOWN, STATE_ON, STATE_OFF)
-from homeassistant.exceptions import ( ConfigEntryAuthFailed, ServiceValidationError )
+from homeassistant.exceptions import ( ConfigEntryAuthFailed, HomeAssistantError, ServiceValidationError )
 from homeassistant.helpers import issue_registry as ir
 
 from .utils import ( time_from_pt_string, get_datetime, date_from_pt_string, time_from_string, rate_limit, log_call, parse_vehicle_rights, vehicle_removed_issue_id, SENSITIVE_DATA_FILTER )
@@ -516,12 +516,23 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
             return
         charge_limit_on = self._sensors.get("switch_battery_charging_limit", False)
         charge_limit = self._sensors.get("number_battery_charging_limit")
-        if not (charge_limit_on and charge_limit and "battery" in self._sensors):
+        battery = self._sensors.get("battery")
+        if not (charge_limit_on and charge_limit and battery is not None):
             return
-        if int(float(self._sensors.get("battery"))) < int(charge_limit):
+        if int(float(battery)) < int(charge_limit):
+            return
+        # The stop command carries the charging start time (hour/minute); until
+        # the vehicle reports one this is a normal state, not an error.
+        if self._sensors.get("time_battery_charging_start") is None:
+            _LOGGER.debug("Cannot auto-stop charging for vehicle %s yet: no charging start time known", self._vehicle["vin"])
             return
         button_name = self.get_translation("component.stellantis_vehicles.entity.button.charge_stop.name")
-        await self.send_charge_command(button_name, False, "delayed")
+        try:
+            await self.send_charge_command(button_name, False, "delayed")
+        except (HomeAssistantError, CommunicationError) as err:
+            # Raising here would fail the whole update and discard the fresh data.
+            _LOGGER.warning("Could not stop charging vehicle %s at the configured limit, retrying on the next update: %s", self._vehicle["vin"], err)
+            return
         self._manage_charge_limit_sent = True
 
     async def _sync_abrp_if_enabled(self, new_data: dict[str, Any]) -> None:
