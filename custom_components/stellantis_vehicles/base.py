@@ -352,22 +352,29 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
             )
         try:
             action_id = await self._stellantis.send_mqtt_message(service, message, self._vehicle)
-            if action_id is not None:
-                # service/message are kept so a 400 "invalid token" response for
-                # this action_id can be retried with its own payload instead of
-                # whatever command was sent last account-wide (see _on_mqtt_message).
-                # sent_at is the fallback pending_action uses before any update
-                # has arrived yet (see pending_action).
-                self._commands_history.update({action_id: {"name": name, "updates": [], "service": service, "message": message, "retried": False, "sent_at": get_datetime()}})
-                self._prune_command_history()
-                self._pending_action_id = action_id
-                self.async_update_listeners()
         except ConfigEntryAuthFailed as e:
             _LOGGER.warning("Authentication failed while sending command '%s' to vehicle '%s': %s", name, self._vehicle['vin'], str(e))
             self.config_entry.async_start_reauth(self.hass)
+            action_id = None
         except Exception as e:
             _LOGGER.error("Failed to send command %s: %s", name, str(e))
             raise
+        if action_id is None:
+            _LOGGER.error("Failed to send command %s: it was not sent to the vehicle", name)
+            raise HomeAssistantError(
+                translation_domain = DOMAIN,
+                translation_key = "command_not_sent",
+                translation_placeholders = {"name": name}
+            )
+        # service/message are kept so a 400 "invalid token" response for
+        # this action_id can be retried with its own payload instead of
+        # whatever command was sent last account-wide (see _on_mqtt_message).
+        # sent_at is the fallback pending_action uses before any update
+        # has arrived yet (see pending_action).
+        self._commands_history.update({action_id: {"name": name, "updates": [], "service": service, "message": message, "retried": False, "sent_at": get_datetime()}})
+        self._prune_command_history()
+        self._pending_action_id = action_id
+        self.async_update_listeners()
 
     @rate_limit(6, 1200) # 6 per 20 min
     async def send_wakeup_command(self, button_name):
