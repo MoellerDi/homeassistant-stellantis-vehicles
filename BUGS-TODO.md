@@ -208,7 +208,7 @@ Fix sketch: give the maintenance request its own `try` and treat it as best effo
 
 ### 54. `refresh_mqtt_token_request` mutates the token dict inside `entry.data`
 
-Not fixed, no branch. Checked on 2026-10-07 with a throwaway test on `testing` (not kept).
+Fixed on the local branch `bugfix/mqtt-token-refresh-is-saved` (from `upstream/develop`, one commit `2890be8`, two lines: the dict is copied with `deepcopy` before it is changed; plus the local-only `bugfix/mqtt-token-refresh-is-saved-tests` with 4 tests, two of which fail against the old code). Not pushed, no PR yet, not in `testing`. Merges without conflicts with all open PRs (#671 touches the same function, checked), with `testing` and with our other branches. Found on 2026-10-07 with a throwaway test on `testing` (not kept).
 
 `stellantis.py`. `set_entry`/`save_config(config.data)` put the nested `mqtt` dict of the entry into `self._config` without copying it, and `refresh_mqtt_token_request` changes `mqtt_config` in place. The test shows the effect: `entry.data["mqtt"]["access_token"]` already holds the new token before `update_stored_config("mqtt", ...)` runs, and `async_update_entry` then returns `False` (nothing changed), so nothing is saved and no listener is called. The rotated tokens only reach the disk with the next real entry update (the OAuth refresh about every hour, or a setting that is changed). A crash or power loss in between brings back the old tokens after the restart. Whether Stellantis invalidates the old MQTT refresh token on use is not verified; if it does, the integration falls back to the OTP path (and spends OTP budget, see #49). The OAuth refresh builds a new dict and is not affected.
 
