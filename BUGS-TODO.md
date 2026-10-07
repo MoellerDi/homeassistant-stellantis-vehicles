@@ -26,6 +26,7 @@ Open items are sorted by priority: a rough combination of how likely the trigger
 | 56 | The reauth flow does not check that the login belongs to the same account | Low - needs a login with another account during a reauth | Medium - tokens and customer_id of another account end up in the entry, the unique_id stays |
 | 57 | Six smaller findings (notification ids, disabled commands in memory, one failing vehicle blocks the entry, ABRP mixes two moments, Fahrenheit list with GB, vehicle picture under `/local`) | see the section | Low |
 | 58 | The reconfigure flow changes the running integration and the entry (`disable_remote_commands()`, `save_config`) before the flow is finished | Medium - every reconfigure of the remote commands that fails or is cancelled after its first step | Low-medium - remote commands stay disabled, the tokens of the running instance and of the entry differ for a while (covered by the foreign draft #674) |
+| 59 | The log mask keeps the first five characters of a value, which shows 5 of the 7 characters of an OTP code | High - every OTP code in the log | Very low - the code is single use and expired within seconds |
 | 21 | `send_abrp_data` logs an undeduplicated warning on every failed ABRP push (`upstream/develop`) | High for anyone with a stale/invalid ABRP API key - fires on every poll, confirmed at 82 occurrences in ~80 minutes in one report | Very low - opt-in feature (needs the user's own ABRP key configured), no functional breakage, purely log noise |
 | 46 | OTP activation errors can still reach the log through `logger.error(xml)`, `ConfigException(xml)` and `requests` exception texts | Needs a failing OTP activation (wrong SMS code or PIN, network error); the `logger.error` line is not limited to `DEBUG` | Low-medium - unknown what the server's error response contains; the SMS code is single use |
 | 40 | The trips endpoint drops the start of the time range once a `pageToken` is sent, so pages after the first are wrong whenever a start is set; `get_vehicle_last_trip` follows `last` anyway | Very low today - needs more than 60 trips in the 24 h window; real windows had at most 7 | Medium if hit - a wrong "last trip"; blocks any future trip-history import that pages |
@@ -251,6 +252,14 @@ Not fixed in our branches, covered by the foreign draft #674. Read from the code
 `config_flow.py`, `async_step_reconfigure` and the steps behind it work on `runtime_data`, the running `StellantisVehicles` instance. (a) Choosing "remote commands" calls `disable_remote_commands()` at once, which writes `remote_commands: False` into the entry. If the flow then fails or is cancelled (the SMS could not be requested, a wrong PIN, the dialog is closed), remote commands stay off. (b) `save_config(oauth)` and `save_config({remote_commands: ...})` change the live `_config` with the tokens and the flag of the unfinished flow while the entry still holds the old values, so a cancelled flow leaves both out of step until the next token refresh writes the entry. It is the same family as #54: state is changed in a place where the change is not committed as one unit.
 
 #674 (draft by FiraSenax) replaces `runtime_data` by a flow-owned `StellantisOauth` client and drops the `disable_remote_commands()` call from the reconfigure step; its tests assert that the running instance is not touched (checked in its diff on 2026-10-07). If #674 does not land, a smaller fix of our own would be the same idea: a flow-owned client for the reconfigure flow.
+
+### 59. The log mask shows 5 of the 7 characters of an OTP code
+
+Not fixed, no branch. Seen live on 2026-10-07 in Graylog (the code is not repeated here).
+
+`utils.py`, `SensitiveDataFilter._mask_sensitive_value`: a value of five characters or fewer becomes `###`, a longer one keeps its first five characters followed by `###`. The OTP code has 7 characters, so the masked line `otp code: xxxxx###` still shows most of it. It is single use and expires within seconds, so the harm is very small, but logs are posted in issues. The rule is fine for long values (tokens, ids) and weak for short ones.
+
+Fix idea: derive the number of visible characters from the length (for example at most a third, none below ten characters), or register the OTP code as a value that is always shown as `###`.
 
 ### 21. `send_abrp_data` logs an undeduplicated warning on every failed ABRP push (`upstream/develop`)
 
@@ -479,7 +488,7 @@ Fix, branch `bugfix/otp-log-masking` (local, based on `upstream/develop`, not pu
 
 Original fix sketch: give `Otp` (or the module) access to the shared `SENSITIVE_DATA_FILTER` instance and `addFilter()` it onto `otp/otp.py`'s logger too, the same way `stellantis.py`/`base.py` do at import time. Since masking substring-matches *registered* values (see #25), also register `Kiw`/`Kfact` there once decoded, not just `otp_code`.
 
-Status: fixed on `bugfix/otp-log-masking` (3 commits on top of `upstream/develop`, tests on `-tests`), merged into `testing`. Local only, not pushed, no PR yet (as of 2026-10-06).
+Status: fixed on `bugfix/otp-log-masking` (3 commits on top of `upstream/develop`, tests on `-tests`), merged into `testing`. Local only, not pushed, no PR yet (as of 2026-10-06). Confirmed live on 2026-10-07 (Graylog): the first MQTT token refresh that needed an OTP code ran at 22:38:54 CEST, wrote `Computed challenge response for action synchro` twice (no values), `Need another otp request` and `otp code: xxxxx###` (masked), and no `iwK`, `Decrypted` or `Unexpected response` lines; a scan of all 246 lines of the integration from 22:30 to 23:11 CEST found no full VIN, customer id, hex key of 32 or more characters, `taskToken`, JWT, bearer token, e-mail address or token value. The refresh succeeded (the next one was scheduled for 22:50:54). One observation, see #59.
 
 ### 25. The OTP code is never registered with the log filter, so it stays unmasked even where the filter *is* attached
 
