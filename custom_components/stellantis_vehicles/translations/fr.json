@@ -694,6 +694,9 @@
     "command_already_pending": {
       "message": "Impossible d'envoyer « {name} » : « {pending_name} » attend toujours une réponse du véhicule."
     },
+    "command_not_sent": {
+      "message": "Impossible d'envoyer « {name} » au véhicule. Détails dans le journal."
+    },
     "preconditioning_program_running": {
       "message": "Le préconditionnement est en cours. Arrêtez-le avant de modifier un programme de préconditionnement, sinon le véhicule interprétera la modification comme une demande d'arrêt."
     },

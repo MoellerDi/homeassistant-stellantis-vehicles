@@ -678,6 +678,9 @@
     "command_already_pending": {
       "message": "\"{name}\" kann nicht gesendet werden: \"{pending_name}\" wartet noch auf eine Antwort vom Fahrzeug."
     },
+    "command_not_sent": {
+      "message": "\"{name}\" kann nicht an das Fahrzeug gesendet werden. Details stehen im Log."
+    },
     "preconditioning_program_running": {
       "message": "Die Vorklimatisierung läuft gerade. Beenden Sie sie, bevor Sie ein Vorklimatisierungsprogramm ändern, sonst wertet das Fahrzeug die Änderung als Stopp-Anforderung."
     },

@@ -694,6 +694,9 @@
     "command_already_pending": {
       "message": "Cannot send \"{name}\": \"{pending_name}\" is still waiting for a response from the vehicle."
     },
+    "command_not_sent": {
+      "message": "Cannot send \"{name}\" to the vehicle. See the log for details."
+    },
     "preconditioning_program_running": {
       "message": "Preconditioning is running. Stop it before changing a preconditioning program, the vehicle would receive the change as a stop request."
     },
