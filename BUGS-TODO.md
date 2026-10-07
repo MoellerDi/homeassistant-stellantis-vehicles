@@ -18,6 +18,7 @@ Open items are sorted by priority: a rough combination of how likely the trigger
 | 14 | `binary_sensor.preconditioning`'s `value_map` (`upstream/develop`) only checks the single-n "preconditioning" spelling | Medium-high (double-n is described as the more common spelling) | Low - the sensor just never updates from its restored/default state, no data loss |
 | 37 | A token refresh never reaches the running paho client, so paho's own auto-reconnect sends the token the client was created with and the broker drops it once that token has expired (`_on_mqtt_disconnect`'s `result_code == 11` refresh branch is dead code) | Medium - any network drop that outlasts the token the client was created with (~15 min after a refresh); confirmed live 2026-10-05 | Low while the stored token is valid (the next poll rebuilds the client with it, up to 2 min with the default interval); with longer poll intervals remote commands stay down until the next poll |
 | 7 | `StellantisLastChargeSensor` can raise `KeyError` at the end of a charge | Low (needs `battery` reported `None` at the exact charge-start moment) | Low - crashes one non-critical sensor's update, self-contained |
+| 51 | Every change of a number, switch, text or time entity ends in `async_refresh()`, a complete REST poll (status plus maintenance) | High - every change, and bursts when a slider is dragged (35 updates in 35 s seen on 2026-10-07) | Low-medium - extra API calls in bursts and a setter that waits for the poll (15.7 s while the MQTT connect times out) |
 | 21 | `send_abrp_data` logs an undeduplicated warning on every failed ABRP push (`upstream/develop`) | High for anyone with a stale/invalid ABRP API key - fires on every poll, confirmed at 82 occurrences in ~80 minutes in one report | Very low - opt-in feature (needs the user's own ABRP key configured), no functional breakage, purely log noise |
 | 46 | OTP activation errors can still reach the log through `logger.error(xml)`, `ConfigException(xml)` and `requests` exception texts | Needs a failing OTP activation (wrong SMS code or PIN, network error); the `logger.error` line is not limited to `DEBUG` | Low-medium - unknown what the server's error response contains; the SMS code is single use |
 | 40 | The trips endpoint drops the start of the time range once a `pageToken` is sent, so pages after the first are wrong whenever a start is set; `get_vehicle_last_trip` follows `last` anyway | Very low today - needs more than 60 trips in the 24 h window; real windows had at most 7 | Medium if hit - a wrong "last trip"; blocks any future trip-history import that pages |
@@ -160,6 +161,20 @@ Fix sketch, in two parts:
 `attributes["initial_percentage"]` is only recorded when charging starts *and* `self._coordinator._sensors.get("battery") is not None` (`sensor.py:227-228`). If `battery` was `None` at that exact moment (same sparse-first-reading scenario as #4), the key never gets set. When charging later ends, `sensor.py:248` unconditionally does `round(float(attributes["final_percentage"]) - float(attributes["initial_percentage"]))`, raising `KeyError: 'initial_percentage'` instead of just leaving `recharged_percent` out.
 
 Fix sketch: guard with `if "initial_percentage" in attributes and "final_percentage" in attributes`, matching the existing guard already used for `recharged_energy`/`recharged_autonomy` right below it.
+
+### 51. Every change of a number, switch, text or time entity triggers a full REST poll
+
+Not fixed, no branch. Seen live on 2026-10-07.
+
+`base.py`: `StellantisBaseNumber.async_set_native_value`, `StellantisBaseSwitch.async_turn_on` and `async_turn_off`, `StellantisBaseText.async_set_value`, and `time.py` (after `send_charge_command`) each end with `await self._coordinator.async_refresh()`. A refresh is a complete update: the status request plus the maintenance request (two REST calls), an MQTT connect attempt while the connection is down, and the after-update hooks (automatic charge stop, ABRP push, last trip). The setter waits for all of it.
+
+Evidence (Graylog, 2026-10-07 CEST): 35 `Finished fetching stellantis_vehicles data` between 21:15:22 and 21:15:57, about one per second at 0.6 s each (roughly 70 REST calls in 35 s), while the charge limit and its switch were being changed. During the MQTT block, four updates of 15.7 s each (21:02:24, 21:02:40, 21:03:41, 21:04:20) fit the same pattern: each change waited for the connect timeout. That these updates came from the setters is an inference from the timing, not proven.
+
+Why it is probably there: a new setting should take effect at once, but the automatic stop only runs inside an update, so without a refresh a changed limit would apply at the next poll (at most one refresh interval). The refresh does not bring new vehicle data that the setting depends on.
+
+Impact: extra API calls in bursts (Stellantis has never answered HTTP 429 in our logs, last checked 2026-09-28), a slow setter while the MQTT connection is down, and most of these updates probably end in the stale check ("API did not return updated vehicle data") because `updatedAt` has not changed.
+
+Fix ideas, smallest first: use `async_request_refresh()` in the setters. Home Assistant's debouncer runs the first call at once and collapses further calls within 10 s into one trailing refresh (`REQUEST_REFRESH_DEFAULT_COOLDOWN = 10`). Or no refresh at all, only `async_update_listeners()` to re-render the entities, plus a direct call of the automatic stop check if the new limit should apply immediately. Related: #4 stage B (the stop reads `self._sensors`, which the entities fill only after an update).
 
 ### 21. `send_abrp_data` logs an undeduplicated warning on every failed ABRP push (`upstream/develop`)
 
