@@ -100,6 +100,12 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
         # Remote services the vehicle's subscription covers, keyed by "fds"
         # code; None until async_lookup_supported_features has succeeded.
         self._supported_features: dict[str, dict[str, Any]] | None = None
+        self._dropped_programs = set()
+        self._programs_cache = None
+        # Preconditioning program edits that differ from the vehicle and are held
+        # locally until the user sends them with the send button or drops them
+        # with the reset button.
+        self._pending_programs = {}
 
     @property
     def supported_features(self) -> dict[str, dict[str, Any]] | None:
@@ -135,12 +141,6 @@ class StellantisVehicleCoordinator(DataUpdateCoordinator):
                 self._supported_features = parse_vehicle_rights(response)
                 _LOGGER.debug("Supported features: %s", self._supported_features)
                 return
-        self._dropped_programs = set()
-        self._programs_cache = None
-        # Preconditioning program edits that differ from the vehicle and are held
-        # locally until the user sends them with the send button or drops them
-        # with the reset button.
-        self._pending_programs = {}
 
     @log_call
     async def _async_update_data(self) -> dict[str, Any] | None:
